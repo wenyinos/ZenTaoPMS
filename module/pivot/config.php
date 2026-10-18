@@ -233,3 +233,87 @@ $config->pivot->builtins['workload'] = array(
     'filters' => array(),
     'vars'    => array(),
 );
+
+/* 6) 贡献者排行：按操作人统计操作数、涉及对象数与完成任务数（社区贡献视角，纯 action 表聚合）。
+   注意 zt_action 表没有 deleted 列，故不加软删过滤。 */
+$config->pivot->builtins['contributorrank'] = array(
+    'name'  => '贡献者排行',
+    'desc'  => '按操作人统计操作总数、涉及对象数与完成任务数（数据源为操作日志表，反映各成员的参与度）。',
+    'group' => '社区',
+    'sql'   => "SELECT t1.actor AS `user`,
+                       COUNT(*) AS actions,
+                       COUNT(DISTINCT CONCAT(t1.objectType, '-', t1.objectID)) AS objects,
+                       SUM(t1.objectType = 'task' AND t1.action = 'finished') AS finishedTasks
+                FROM " . TABLE_ACTION . " t1
+                GROUP BY t1.actor",
+    'fields' => array(
+        'user'          => array('type' => 'user',   'object' => 'user', 'field' => 'account'),
+        'actions'       => array('type' => 'number', 'object' => '', 'field' => ''),
+        'objects'       => array('type' => 'number', 'object' => '', 'field' => ''),
+        'finishedTasks' => array('type' => 'number', 'object' => '', 'field' => ''),
+    ),
+    'langs' => array(
+        'user'          => array('zh-cn' => '成员', 'en' => 'Member'),
+        'actions'       => array('zh-cn' => '操作数', 'en' => 'Actions'),
+        'objects'       => array('zh-cn' => '涉及对象数', 'en' => 'Objects'),
+        'finishedTasks' => array('zh-cn' => '完成任务数', 'en' => 'Finished Tasks'),
+    ),
+    'settings' => array(
+        'group1'         => 'user',
+        'group2'         => '',
+        'group3'         => '',
+        'columns'        => array(
+            array('field' => 'actions',       'stat' => 'sum'),
+            array('field' => 'objects',       'stat' => 'sum'),
+            array('field' => 'finishedTasks', 'stat' => 'sum'),
+        ),
+        'columnTotal'    => 'sum',
+        'columnPosition' => 'bottom',
+        'summary'        => true,
+    ),
+    'filters' => array(),
+    'vars'    => array(),
+);
+
+/* 7) 社区健康：按产品统计 Bug 总量、已解决/关闭数与平均关闭时长（天）。 */
+$config->pivot->builtins['communityhealth'] = array(
+    'name'  => '社区健康',
+    'desc'  => '按产品统计 Bug 总量、已解决/关闭数与平均关闭时长（天），反映各产品的质量闭环效率。',
+    'group' => '社区',
+    'sql'   => "SELECT p.name AS product,
+                       COUNT(*) AS total,
+                       SUM(t1.status IN ('resolved', 'closed')) AS resolved,
+                       ROUND(AVG(CASE WHEN t1.status IN ('resolved', 'closed') AND t1.closedDate > '0000-00-00'
+                                      THEN DATEDIFF(t1.closedDate, t1.openedDate) END), 1) AS avgDays
+                FROM " . TABLE_BUG . " t1
+                LEFT JOIN " . TABLE_PRODUCT . " p ON t1.product = p.id
+                WHERE t1.deleted = '0' AND p.deleted = '0'
+                GROUP BY p.name",
+    'fields' => array(
+        'product'  => array('type' => 'object', 'object' => 'product', 'field' => 'name'),
+        'total'    => array('type' => 'number', 'object' => '', 'field' => ''),
+        'resolved' => array('type' => 'number', 'object' => '', 'field' => ''),
+        'avgDays'  => array('type' => 'number', 'object' => '', 'field' => ''),
+    ),
+    'langs' => array(
+        'product'  => array('zh-cn' => '产品', 'en' => 'Product'),
+        'total'    => array('zh-cn' => 'Bug总数', 'en' => 'Total Bugs'),
+        'resolved' => array('zh-cn' => '已解决', 'en' => 'Resolved'),
+        'avgDays'  => array('zh-cn' => '平均关闭时长(天)', 'en' => 'Avg Close Days'),
+    ),
+    'settings' => array(
+        'group1'         => 'product',
+        'group2'         => '',
+        'group3'         => '',
+        'columns'        => array(
+            array('field' => 'total',    'stat' => 'sum'),
+            array('field' => 'resolved', 'stat' => 'sum'),
+            array('field' => 'avgDays',  'stat' => 'avg'),
+        ),
+        'columnTotal'    => 'sum',
+        'columnPosition' => 'bottom',
+        'summary'        => true,
+    ),
+    'filters' => array(),
+    'vars'    => array(),
+);
