@@ -116,6 +116,7 @@ js::set('browseType', $browseType);
     if(!isset($browseType)) $browseType = '';
     if(!isset($orderBy))    $orderBy = '';
     common::printIcon('task', 'report', "project=$projectID&browseType=$browseType", '', 'button', 'bar-chart muted');
+    echo html::a(inlink('gantt', "projectID=$projectID"), '<i class="icon icon-calendar muted"></i> ' . $lang->project->gantt, '', "class='btn btn-link'");
     ?>
 
     <div class="btn-group dropdown-hover">

@@ -240,6 +240,40 @@ class project extends control
     }
 
     /**
+     * Gantt chart of tasks in a project (read-only).
+     *
+     * @param  int    $projectID
+     * @access public
+     * @return void
+     */
+    public function gantt($projectID = 0)
+    {
+        $project   = $this->commonAction($projectID);
+        $projectID = $project->id;
+
+        /* 只取有完整起止日期、未取消的任务；无日期无法在时间轴上定位。`left` 是 MySQL 保留字，须加反引号。 */
+        $tasks = $this->dao->select('id, name, assignedTo, estStarted, deadline, status, estimate, consumed, `left`, parent')
+            ->from(TABLE_TASK)
+            ->where('project')->eq($projectID)
+            ->andWhere('deleted')->eq('0')
+            ->andWhere('status')->ne('cancel')
+            ->andWhere('estStarted')->ne('0000-00-00')
+            ->andWhere('deadline')->ne('0000-00-00')
+            ->orderBy('estStarted, id')
+            ->fetchAll('id');
+
+        $this->view->title      = $project->name . $this->lang->colon . $this->lang->project->gantt;
+        $this->view->position[] = html::a($this->createLink('project', 'browse', "projectID=$projectID"), $project->name);
+        $this->view->position[] = $this->lang->project->gantt;
+
+        $this->view->project = $project;
+        $this->view->tasks   = $tasks;
+        $this->view->users   = $this->loadModel('user')->getPairs('noletter');
+        $this->view->statusList = $this->lang->task->statusList;
+        $this->display();
+    }
+
+    /**
      * Browse tasks in group.
      *
      * @param  int    $projectID
