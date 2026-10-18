@@ -215,9 +215,6 @@ class webhookModel extends model
             if(strpos(",$webhook->projects,", ",$action->project,") === false) return false;
         }
 
-        static $users = array();
-        if(empty($users)) $users = $this->loadModel('user')->getList();
-
         $object   = $this->dao->select('*')->from($this->config->objectTables[$objectType])->where('id')->eq($objectID)->fetch();
         $field    = $this->config->action->objectNameFields[$objectType];
         $host     = common::getSysURL();
@@ -225,29 +222,15 @@ class webhookModel extends model
         $title    = $this->app->user->realname . $this->lang->action->label->$actionType . $this->lang->action->objectTypes[$objectType];
         $text     = $title . ' ' . "[#{$objectID}::{$object->$field}](" . $host . $viewLink . ")";
 
-        $mobile = '';
-        $email  = '';
-        if(in_array($objectType, $this->config->webhook->needAssignTypes) && !empty($object->assignedTo))
-        {
-            foreach($users as $user)
-            {
-                if($user->account == $object->assignedTo)
-                {
-                    $mobile = $user->mobile;
-                    $email  = $user->email;
-                    break;
-                }
-            }
-        }
         $action->text = $text;
 
-        if($webhook->type == 'dingding')
+        if($webhook->type == 'weixin')
         {
-            $data = $this->getDingdingData($title, $text, $mobile);
+            $data = $this->getWeixinData($title, $text);
         }
-        elseif($webhook->type == 'bearychat')
+        elseif($webhook->type == 'feishu')
         {
-            $data = $this->getBearychatData($text, $mobile, $email, $objectType, $objectID);
+            $data = $this->getFeishuData($title, $text);
         }
         else
         {
@@ -282,71 +265,59 @@ class webhookModel extends model
     }
 
     /**
-     * Get hook data for dingding. 
+     * Get hook data for WeCom (企业微信群机器人). 
      * 
      * @param  string $title 
      * @param  string $text 
-     * @param  string $mobile 
      * @access public
      * @return object 
      */
-    public function getDingdingData($title, $text, $mobile)
+    public function getWeixinData($title, $text)
     {
-        if($mobile) $text .= " @{$mobile}";
-
+        /* 企业微信 markdown 只有 content 字段，无独立标题，标题并入正文。 */
         $markdown = new stdclass();
-        $markdown->title = $title;
-        $markdown->text  = $text;
+        $markdown->content = "**{$title}**\n{$text}";
 
         $data = new stdclass();
         $data->msgtype  = 'markdown';
         $data->markdown = $markdown;
 
-        if($mobile)
-        {
-            $at = new stdclass();
-            $at->atMobiles = array($mobile);
-            $at->isAtAll   = false;
-
-            $data->at = $at;
-        }
-
         return $data;
     }
 
     /**
-     * Get hook data for bearychat. 
+     * Get hook data for Feishu (飞书自定义机器人). 
      * 
+     * @param  string $title 
      * @param  string $text 
-     * @param  string $mobile 
-     * @param  string $email 
-     * @param  string $objectType 
-     * @param  int    $objectID 
      * @access public
      * @return object 
      */
-    public function getBearychatData($text, $mobile, $email, $objectType, $objectID)
+    public function getFeishuData($title, $text)
     {
-        $data = new stdclass();
-        $data->text     = $text;
-        $data->markdown = 'true';
-        $data->user     = $mobile ? $mobile : ($email ? $email : $this->app->user->account);
+        /* 飞书用 interactive 卡片 + lark_md，才能把 markdown 链接渲染成可点击。 */
+        $title_ = new stdclass();
+        $title_->tag     = 'plain_text';
+        $title_->content = $title;
 
-        if(!empty($_FILES['files']['name'][0]))
-        {
-            $this->loadModel('file');
-            $files = $this->dao->select('*')->from(TABLE_FILE)->where('objectType')->eq($objectType)->andWhere('objectID')->eq($objectID)->orderBy('addedDate_desc,id_desc')->limit(count($_FILES['files']['name']))->fetchAll();
-            if($files)
-            {
-                foreach($files as $file)
-                {
-                    $attachment = array();
-                    $attachment['title'] = $file->title;
-                    $attachment['images'][]['url'] = $data->host . $this->file->webPath . $file->pathname; 
-                    $data->attachments[] = $attachment;
-                }
-            }
-        }
+        $header = new stdclass();
+        $header->title = $title_;
+
+        $text_ = new stdclass();
+        $text_->tag     = 'lark_md';
+        $text_->content = $text;
+
+        $element = new stdclass();
+        $element->tag  = 'div';
+        $element->text = $text_;
+
+        $card = new stdclass();
+        $card->header   = $header;
+        $card->elements = array($element);
+
+        $data = new stdclass();
+        $data->msg_type = 'interactive';
+        $data->card     = $card;
 
         return $data;
     }

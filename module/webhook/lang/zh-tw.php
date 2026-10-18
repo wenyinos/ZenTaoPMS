@@ -32,8 +32,8 @@ $lang->webhook->date        = '發送時間';
 $lang->webhook->data        = '數據';
 $lang->webhook->result      = '結果';
 
-$lang->webhook->typeList['bearychat'] = '倍洽';
-$lang->webhook->typeList['dingding']  = '釘釘';
+$lang->webhook->typeList['weixin']    = '企業微信';
+$lang->webhook->typeList['feishu']    = '飛書';
 $lang->webhook->typeList['default']   = '預設';
 
 $lang->webhook->sendTypeList['sync']  = '同步';
@@ -58,8 +58,8 @@ $lang->webhook->note->async   = '非同步需要打開計劃任務';
 $lang->webhook->note->product = "此項為空時所有{$lang->productCommon}的動作都會觸發鈎子，否則只有關聯{$lang->productCommon}的動作才會觸發。";
 $lang->webhook->note->project = "此項為空時所有{$lang->projectCommon}的動作都會觸發鈎子，否則只有關聯{$lang->projectCommon}的動作才會觸發。";
 
-$lang->webhook->note->typeList['bearychat'] = '請在倍洽中添加一個禪道機器人，並將其webhook填寫到此處。';
-$lang->webhook->note->typeList['dingding']  = '請在釘釘中添加一個自定義機器人，並將其webhook填寫到此處。';
+$lang->webhook->note->typeList['weixin']    = '請在企業微信群中添加一個群機器人，並將其 webhook 地址填寫到此處。';
+$lang->webhook->note->typeList['feishu']    = '請在飛書群中添加一個自定義機器人，並將其 webhook 地址填寫到此處。';
 $lang->webhook->note->typeList['default']   = '從第三方系統獲取webhook並填寫到此處。';
 
 $lang->webhook->error = new stdclass();

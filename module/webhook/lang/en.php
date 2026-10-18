@@ -32,8 +32,8 @@ $lang->webhook->date        = 'Date';
 $lang->webhook->data        = 'Data';
 $lang->webhook->result      = 'Result';
 
-$lang->webhook->typeList['bearychat'] = 'Bearychat';
-$lang->webhook->typeList['dingding']  = 'Dingding';
+$lang->webhook->typeList['weixin']    = 'WeCom';
+$lang->webhook->typeList['feishu']    = 'Feishu';
 $lang->webhook->typeList['default']   = 'Default';
 
 $lang->webhook->sendTypeList['sync']  = 'Synchronization';
@@ -58,8 +58,8 @@ $lang->webhook->note->async   = 'If the send type is asynchronous, need open cro
 $lang->webhook->note->product = "All actions will trigger the hook if the {$lang->productCommon} is empty, else only actions of the {$lang->productCommon} will trigger it.";
 $lang->webhook->note->project = "All actions will trigger the hook if the {$lang->projectCommon} is empty, else only actions of the {$lang->projectCommon} will trigger it.";
 
-$lang->webhook->note->typeList['bearychat'] = 'Add a zentao bot in bearychat and get the webhook address.';
-$lang->webhook->note->typeList['dingding']  = 'Add a customed bot in dingding and get the webhook address.';
+$lang->webhook->note->typeList['weixin']    = 'Add a group bot in WeCom and fill its webhook address here.';
+$lang->webhook->note->typeList['feishu']    = 'Add a custom bot in Feishu and fill its webhook address here.';
 $lang->webhook->note->typeList['default']   = 'Get webhook address from others';
 
 $lang->webhook->error = new stdclass();
