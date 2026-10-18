@@ -41,6 +41,59 @@ class releaseModel extends model
     }
 
     /**
+     * Build a markdown changelog for a release.
+     *
+     * 供「生成发布说明」按钮使用：按需求 / 已修复 Bug / 遗留问题分组渲染，
+     * 输出可直接贴进 GitHub Release 或 doc/release-notes/ 的 markdown。
+     *
+     * @param  object $release
+     * @param  array  $stories
+     * @param  array  $bugs
+     * @param  array  $leftBugs
+     * @access public
+     * @return string
+     */
+    public function buildChangelog($release, $stories, $bugs, $leftBugs)
+    {
+        $lines   = array();
+        $lines[] = '## 本次更新（' . $release->name . '）';
+        $lines[] = '';
+        if(!empty($release->date) and $release->date != '0000-00-00') $lines[] = '> 发布日期：' . $release->date;
+        $lines[] = '';
+
+        $desc = trim(strip_tags((string)$release->desc));
+        if($desc !== '')
+        {
+            $lines[] = $desc;
+            $lines[] = '';
+        }
+
+        $sections = array(
+            '需求'         => $stories,
+            '已修复 Bug'   => $bugs,
+            '遗留问题'     => $leftBugs,
+        );
+        $keys = array_keys($sections);
+        foreach($keys as $index => $title)
+        {
+            $items   = $sections[$title];
+            $lines[] = '### ' . $title . '（' . count($items) . ' 项）';
+            $lines[] = '';
+            if($items)
+            {
+                foreach($items as $item) $lines[] = '- [' . $item->id . '] ' . $item->title;
+            }
+            else
+            {
+                $lines[] = '- （无）';
+            }
+            if($index < count($keys) - 1) $lines[] = '';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * Get list of releases.
      * 
      * @param  int    $productID 
