@@ -41,6 +41,9 @@ class upgradeModel extends model
         $this->createDocActionTable();
         $this->seedTemplateLib();
 
+        /* 9.10.3 新增：代码平台 Webhook 接收端两张表（幂等）。 */
+        $this->createRepoHookTables();
+
         switch($fromVersion)
         {
             case '9_8_3_1':
@@ -179,6 +182,64 @@ class upgradeModel extends model
   `type` varchar(10) NOT NULL DEFAULT 'manual',
   PRIMARY KEY (`id`),
   KEY `pivot` (`pivot`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+        );
+
+        foreach($tables as $suffix => $sql)
+        {
+            $tableName = $this->config->db->prefix . $suffix;
+            $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.tables')
+                ->where('table_schema')->eq($this->config->db->name)
+                ->andWhere('table_name')->eq($tableName)
+                ->fetch('count');
+            if($exists) continue;
+
+            try
+            {
+                $this->dbh->exec(sprintf($sql, $tableName));
+            }
+            catch (PDOException $e)
+            {
+                self::$errors[] = $e->getMessage() . "<p>The sql is: CREATE TABLE {$tableName}</p>";
+            }
+        }
+    }
+
+    /**
+     * 9.10.3 代码平台 Webhook：zt_repohook（接收端配置）+ zt_repohooklog（排障日志）。
+     * 幂等（information_schema 探测 + CREATE TABLE IF NOT EXISTS），可重复执行。
+     *
+     * @access public
+     * @return void
+     */
+    public function createRepoHookTables()
+    {
+        $tables = array(
+            'repohook' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `provider` varchar(20) NOT NULL DEFAULT 'github',
+  `token` varchar(64) NOT NULL DEFAULT '',
+  `secret` varchar(255) NOT NULL DEFAULT '',
+  `product` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `status` enum('normal','closed') NOT NULL DEFAULT 'normal',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+            'repohooklog' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `hookID` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `event` varchar(40) NOT NULL DEFAULT '',
+  `payload` text NOT NULL,
+  `result` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `hookID` (`hookID`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8",
         );
 

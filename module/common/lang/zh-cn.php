@@ -372,6 +372,8 @@ $lang->admin->menu->trashes   = array('link' => '回收站|action|trash', 'subMo
 $lang->admin->menu->dev       = array('link' => '二次开发|dev|api', 'alias' => 'db', 'subModule' => 'dev,editor');
 /* 错误日志（9.10.0）。 */
 $lang->admin->menu->errorlog = array('link' => '错误日志|errorlog|browse', 'subModule' => 'errorlog');
+/* 代码回调（9.10.3）。 */
+$lang->admin->menu->repohook = array('link' => '代码回调|repohook|browse', 'subModule' => 'repohook');
 $lang->admin->menu->sso       = '然之集成|admin|sso';
 
 $lang->convert   = new stdclass();

@@ -110,6 +110,8 @@ define('TABLE_DOCACTION',     '`' . $config->db->prefix . 'docaction`');
 define('TABLE_PIVOT',        '`' . $config->db->prefix . 'pivot`');
 define('TABLE_PIVOTSPEC',    '`' . $config->db->prefix . 'pivotspec`');
 define('TABLE_PIVOTDRILL',   '`' . $config->db->prefix . 'pivotdrill`');
+define('TABLE_REPOHOOK',      '`' . $config->db->prefix . 'repohook`');
+define('TABLE_REPOHOOKLOG',   '`' . $config->db->prefix . 'repohooklog`');
 define('TABLE_SCORE',         '`' . $config->db->prefix . 'score`');
 define('TABLE_NOTIFY',        '`' . $config->db->prefix . 'notify`');
 if(!defined('TABLE_LANG')) define('TABLE_LANG', '`' . $config->db->prefix . 'lang`');

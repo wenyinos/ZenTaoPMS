@@ -3465,3 +3465,31 @@ CREATE TABLE IF NOT EXISTS `zt_pivotdrill` (
   PRIMARY KEY (`id`),
   KEY `pivot` (`pivot`,`version`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_repohook`;
+CREATE TABLE IF NOT EXISTS `zt_repohook` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `provider` varchar(20) NOT NULL DEFAULT 'github',
+  `token` varchar(64) NOT NULL DEFAULT '',
+  `secret` varchar(255) NOT NULL DEFAULT '',
+  `product` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `status` enum('normal','closed') NOT NULL DEFAULT 'normal',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_repohooklog`;
+CREATE TABLE IF NOT EXISTS `zt_repohooklog` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `hookID` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `event` varchar(40) NOT NULL DEFAULT '',
+  `payload` text NOT NULL,
+  `result` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `hookID` (`hookID`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;

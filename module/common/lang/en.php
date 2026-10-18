@@ -372,6 +372,8 @@ $lang->admin->menu->trashes   = array('link' => 'Recycle|action|trash', 'subModu
 $lang->admin->menu->dev       = array('link' => 'Develop|dev|api', 'alias' => 'db', 'subModule' => 'dev,editor');
 /* Error log (9.10.0). */
 $lang->admin->menu->errorlog = array('link' => 'Error Log|errorlog|browse', 'subModule' => 'errorlog');
+/* Repo hook (9.10.3). */
+$lang->admin->menu->repohook = array('link' => 'Repo Hook|repohook|browse', 'subModule' => 'repohook');
 $lang->admin->menu->sso       = 'Zdoo|admin|sso';
 
 $lang->convert   = new stdclass();
