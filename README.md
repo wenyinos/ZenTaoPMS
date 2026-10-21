@@ -202,5 +202,12 @@ rewrite /(.*)$ /index.php/$1 last;
 - Keep the install/upgrade residue (`install.php`, `upgrade.php`, `checktable.php`) and the `api`/`editor` debug entry points blocked at runtime; lift only the residue rule for an install/upgrade and restore it immediately (see Installation step 5).
 - Run DB consistency checks after database-related changes.
 
+### Scheduled Tasks (cron)
+
+- **Status**: the dev deployment has scheduled tasks disabled (`system.common.global.cron = 0`); browsers no longer request `/cron-ajaxExec-*`, so the 499s and long-lived PHP-FPM workers are gone.
+- **What stops**: daily backup, async mail, async webhook delivery, errorlog cleanup, burn-down refresh and task reminders.
+- **To re-enable**: do not just flip the admin switch; follow [cron deployment](doc/cron-deployment.md) (keep the switch on, block browser triggers in nginx, run a single CLI daemon).
+- With the switch off, `bin/ztcli ... cron-ajaxExec` exits immediately by design.
+
 ## License
 Z PUBLIC LICENSE 1.2 (see `LICENSE`).

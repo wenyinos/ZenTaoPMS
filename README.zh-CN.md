@@ -203,5 +203,12 @@ rewrite /(.*)$ /index.php/$1 last;
 - 运行态封禁安装/升级残留（`install.php`、`upgrade.php`、`checktable.php`）与 `api`/`editor` 调试入口；安装/升级时只临时放行残留规则，完成后立即恢复（见「安装步骤 5」）。
 - 涉及数据库变更后执行一致性检查。
 
+### 定时任务（cron）
+
+- **现状**：dev 部署已关闭计划任务（`system.common.global.cron = 0`），浏览器不再请求 `/cron-ajaxExec-*`，499 与常驻 PHP-FPM 进程随之消失。
+- **暂停的能力**：每日备份、异步发信、Webhook 异步投递、errorlog 超期清理、燃尽图、任务提醒。
+- **如需恢复**：不要只打开后台开关，按 [定时任务部署](doc/cron-deployment.md) 的“开关保持打开 + nginx 阻断浏览器触发 + 单一 CLI 常驻进程”方式部署。
+- 关闭状态下 `bin/ztcli ... cron-ajaxExec` 也会直接退出，这是预期行为。
+
 ## 许可证
 Z PUBLIC LICENSE 1.2（见 `LICENSE`）。
