@@ -2351,6 +2351,126 @@ class projectModel extends model
     }
 
     /**
+     * Get the saved card order of a kanban.
+     *
+     * 看板卡片的拖拽顺序，按泳道维度分别保存，避免切换维度后串序：
+     *   {"<type>": {"<laneKey>|<status>": ["task-12", "bug-8", ...]}}
+     * 卡片键带 task-/bug- 前缀，防止任务与 Bug 的 id 撞号。
+     *
+     * @param  int    $projectID
+     * @param  string $type
+     * @access public
+     * @return array
+     */
+    public function getKanbanOrder($projectID, $type = '')
+    {
+        $orders = $this->loadModel('setting')->getItem("owner=system&module=project&section=kanbanOrder&key=project$projectID");
+        $orders = json_decode((string)$orders, true);
+        if(!is_array($orders)) return array();
+        if($type === '') return $orders;
+        return isset($orders[$type]) && is_array($orders[$type]) ? $orders[$type] : array();
+    }
+
+    /**
+     * Save the card order of one lane dimension.
+     *
+     * @param  int    $projectID
+     * @param  string $type
+     * @param  array  $order
+     * @access public
+     * @return bool
+     */
+    public function saveKanbanOrder($projectID, $type, $order)
+    {
+        if(!is_array($order)) return false;
+
+        $orders        = $this->getKanbanOrder($projectID);
+        $orders[$type] = $order;
+
+        return $this->loadModel('setting')->setItem("system.project.kanbanOrder.project$projectID", json_encode($orders));
+    }
+
+    /**
+     * Drop cards that no longer exist from a submitted kanban order.
+     *
+     * 拖拽顺序是长期驻留的配置，必须回收已删除/已移出项目的卡片，否则会随
+     * 项目使用无限膨胀（同时限制单元格数量与被采纳的 ID 范围）。
+     *
+     * @param  int    $projectID
+     * @param  array  $order
+     * @access public
+     * @return array
+     */
+    public function filterKanbanOrder($projectID, $order)
+    {
+        $taskIDs = $this->dao->select('id')->from(TABLE_TASK)->where('project')->eq((int)$projectID)->andWhere('deleted')->eq(0)->fetchPairs('id', 'id');
+        $bugIDs  = $this->dao->select('id')->from(TABLE_BUG)->where('project')->eq((int)$projectID)->andWhere('deleted')->eq(0)->fetchPairs('id', 'id');
+
+        $filtered = array();
+        foreach($order as $cell => $items)
+        {
+            if(count($filtered) >= 200) break;              // 单元格上限
+            if(!is_array($items)) continue;
+
+            $keep = array();
+            foreach($items as $item)
+            {
+                if(count($keep) >= 500) break;              // 单格卡片上限
+                if(!preg_match('/^(task|bug)-(\d+)$/', (string)$item, $matches)) continue;
+
+                $id = (int)$matches[2];
+                if($matches[1] == 'task' and isset($taskIDs[$id])) $keep[] = $item;
+                if($matches[1] == 'bug'  and isset($bugIDs[$id]))  $keep[] = $item;
+            }
+            if(!empty($keep)) $filtered[$cell] = $keep;
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * Sort kanban cards by the saved order.
+     *
+     * 未记录顺序的卡片追加在末尾（按 id 倒序，与默认排序一致）。
+     *
+     * @param  array  $kanbanGroup
+     * @param  array  $cellOrder
+     * @access public
+     * @return void
+     */
+    public function sortKanbanCards(&$kanbanGroup, $cellOrder)
+    {
+        if(empty($cellOrder)) return;
+
+        foreach($kanbanGroup as $laneKey => $group)
+        {
+            if(count(get_object_vars($group)) == 0) continue;
+
+            foreach(array('tasks' => 'task', 'bugs' => 'bug') as $kind => $prefix)
+            {
+                if(empty($group->$kind)) continue;
+
+                foreach($group->$kind as $status => $items)
+                {
+                    $key = $laneKey . '|' . $status;
+                    if(empty($cellOrder[$key])) continue;
+
+                    $order = array_flip($cellOrder[$key]);
+                    usort($items, function($a, $b) use ($order, $prefix)
+                    {
+                        $aIndex = isset($order["$prefix-{$a->id}"]) ? $order["$prefix-{$a->id}"] : PHP_INT_MAX;
+                        $bIndex = isset($order["$prefix-{$b->id}"]) ? $order["$prefix-{$b->id}"] : PHP_INT_MAX;
+                        if($aIndex == $bIndex) return $b->id <=> $a->id;
+                        return $aIndex <=> $bIndex;
+                    });
+
+                    $group->{$kind}[$status] = $items;
+                }
+            }
+        }
+    }
+
+    /**
      * Save Kanban Data.
      *
      * @param  int    $projectID
@@ -2747,5 +2867,54 @@ class projectModel extends model
             $html .= '</li>';
         }
         return $html;
+    }
+
+    /**
+     * 需求跟踪矩阵的数据（project|track）。
+     *
+     * 一次批量取回，避免逐需求查询（N+1）：需求 ↔ 迭代/任务/Bug/用例。
+     * 注意：本仓 zt_projectstory 无 branch 列（22.6 才有），故不做分支维度。
+     *
+     * @param  array  $stories
+     * @param  int    $projectID
+     * @access public
+     * @return array
+     */
+    public function getStoryTrackData($stories, $projectID)
+    {
+        $storyIdList = array_keys($stories);
+        $track = array('projects' => array(), 'tasks' => array(), 'bugs' => array(), 'cases' => array());
+        if(empty($storyIdList)) return $track;
+
+        /* 需求被哪些迭代/项目关联（含本项目与子项目）。 */
+        $track['projects'] = $this->dao->select('t1.story, t1.project, t2.name')->from(TABLE_PROJECTSTORY)->alias('t1')
+            ->leftJoin(TABLE_PROJECT)->alias('t2')->on('t1.project = t2.id')
+            ->where('t1.story')->in($storyIdList)
+            ->andWhere('t2.deleted')->eq('0')
+            ->orderBy('t1.project')
+            ->fetchGroup('story', 'project');
+
+        /* 任务。 */
+        $track['tasks'] = $this->dao->select('id, story, project, name, status, assignedTo, deadline')->from(TABLE_TASK)
+            ->where('story')->in($storyIdList)
+            ->andWhere('deleted')->eq('0')
+            ->orderBy('id')
+            ->fetchGroup('story', 'id');
+
+        /* Bug。 */
+        $track['bugs'] = $this->dao->select('id, story, project, title, status, pri')->from(TABLE_BUG)
+            ->where('story')->in($storyIdList)
+            ->andWhere('deleted')->eq('0')
+            ->orderBy('id')
+            ->fetchGroup('story', 'id');
+
+        /* 用例。zt_case 无 project 列（9.8.3 结构），归属走 product。 */
+        $track['cases'] = $this->dao->select('id, story, product, title, status, lastRunResult')->from(TABLE_CASE)
+            ->where('story')->in($storyIdList)
+            ->andWhere('deleted')->eq('0')
+            ->orderBy('id')
+            ->fetchGroup('story', 'id');
+
+        return $track;
     }
 }

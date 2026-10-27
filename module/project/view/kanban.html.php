@@ -14,7 +14,6 @@
     <?php echo html::a($this->createLink('project', 'ajaxKanbanSetting', "projectID=$projectID"), "<i class='icon-cog muted'></i> " . $lang->project->kanbanSetting, '', "class='iframe btn btn-link'");?>
     <?php if(common::hasPriv('project', 'printKanban')) echo html::a($this->createLink('project', 'printKanban', "projectID=$projectID"), "<i class='icon-printer muted'></i> " . $lang->project->printKanban, '', "class='iframe btn btn-link' id='printKanban' title='{$lang->project->printKanban}' data-width='500'");?>
     <?php 
-    /* 原写 $browseType（本页签名里没有该参数，恒为空）→ 导出链接 type 空、order_asc 还会撞 zt_task 无 order 列；固定为 id_asc + all。 */
     $link = $this->createLink('task', 'export', "project=$projectID&orderBy=id_asc&type=all");
     if(common::hasPriv('task', 'export')) echo html::a($link, "<i class='icon-import muted'></i> " . $lang->task->export, '', "class='btn btn-link iframe' data-width='700'");
     ?>
@@ -94,6 +93,8 @@ $account = $this->app->user->account;
               <?php endforeach;?>
               <?php echo "<li" . ($type == 'assignedTo' ? " class='active'" : '') . ">" . html::a(inlink('kanban', "project=$projectID&type=assignedTo"), $lang->project->groups['assignedTo']) . "</li>";?>
               <?php echo "<li" . ($type == 'finishedBy' ? " class='active'" : '') . ">" . html::a(inlink('kanban', "project=$projectID&type=finishedBy"), $lang->project->groups['finishedBy']) . "</li>";?>
+              <?php echo "<li" . ($type == 'module' ? " class='active'" : '') . ">" . html::a(inlink('kanban', "project=$projectID&type=module"), $lang->project->groups['module']) . "</li>";?>
+              <?php echo "<li" . ($type == 'pri' ? " class='active'" : '') . ">" . html::a(inlink('kanban', "project=$projectID&type=pri"), $lang->project->groups['pri']) . "</li>";?>
             </ul>
           </div>
         </th>
@@ -107,7 +108,7 @@ $account = $this->app->user->account;
       <?php $rowIndex = 0; ?>
       <?php foreach($kanbanGroup as $groupKey => $group):?>
       <?php if(count(get_object_vars($group)) == 0) continue;?>
-      <tr data-id='<?php echo $rowIndex++?>'>
+      <tr data-id='<?php echo $rowIndex++?>' data-lane='<?php echo $groupKey?>'>
         <?php if($hasGroupCol):?>
         <td class='c-side text-left'>
           <?php if($groupKey != 'nokey'):?>
@@ -122,9 +123,13 @@ $account = $this->app->user->account;
               <div class='pull-right text-muted story-estimate' title='<?php echo $lang->story->estimate?>'><?php echo $story->estimate . 'h ';?></div>
             </div>
           </div>
+          <?php elseif($type == 'pri'):?>
+          <div class='board-story' data-id='<?php echo $groupKey?>'><span class='label-pri label-pri-<?php echo $groupKey?>'>P<?php echo $groupKey?></span></div>
           <?php else:?>
-          <div class='board-story' data-id='<?php echo $groupKey?>'><?php echo zget($realnames, $groupKey);?></div>
+          <div class='board-story' data-id='<?php echo $groupKey?>'><?php echo $groupKey === '' ? $lang->task->noAssigned : zget($laneNames, $groupKey, $groupKey);?></div>
           <?php endif;?>
+          <?php else:?>
+          <div class='board-story text-muted' data-id='nokey'><?php echo $lang->project->kanbanNoLane;?></div>
           <?php endif;?>
         </td>
         <?php endif;?>
@@ -179,4 +184,6 @@ $account = $this->app->user->account;
   <?php endif;?>
 </div>
 <?php echo js::set('projectID', $projectID);?>
+<?php echo js::set('kanbanType', $type);?>
+<?php echo js::set('kanbanOrderFailed', $lang->project->kanbanOrderFailed);?>
 <?php include '../../common/view/footer.html.php';?>

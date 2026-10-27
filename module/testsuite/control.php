@@ -734,6 +734,133 @@ class testsuite extends control
     }
 
     /**
+     * Export cases of a case library.
+     *
+     * 按当前浏览条件（或勾选项）导出用例 CSV。字段与导入模板同构
+     * （stepDesc/stepExpect 成对），因此支持"导出 → 修改 → 再导入"闭环。
+     * 只做 CSV，不引入 Excel 读写依赖。
+     *
+     * @param  int    $libID
+     * @param  string $orderBy
+     * @param  string $browseType
+     * @access public
+     * @return void
+     */
+    public function exportCase($libID, $orderBy = 'id_desc', $browseType = 'all')
+    {
+        $this->loadModel('testcase');
+
+        if($_POST)
+        {
+            $caseLang = $this->lang->testcase;
+
+            /* 字段清单：支持在对话框里自定义导出列。 */
+            $fields = $this->post->exportFields ? $this->post->exportFields : explode(',', $this->config->testsuite->exportFields);
+            foreach($fields as $key => $fieldName)
+            {
+                $fieldName = trim($fieldName);
+                $fields[$fieldName] = isset($caseLang->$fieldName) ? $caseLang->$fieldName : $fieldName;
+                unset($fields[$key]);
+            }
+
+            $cases = $this->testsuite->getCasesToExport($libID, $this->post->exportType, $orderBy);
+
+            $moduleIdList = array();
+            foreach($cases as $case) $moduleIdList[$case->module] = $case->module;
+
+            $modules = $this->dao->select('id,name')->from(TABLE_MODULE)->where('id')->in($moduleIdList)->fetchPairs();
+            $users   = $this->loadModel('user')->getPairs('noletter');
+            $steps   = $this->dao->select('*')->from(TABLE_CASESTEP)
+                ->where('`case`')->in(array_keys($cases))
+                ->orderBy('version desc,id')
+                ->fetchGroup('case', 'id');
+
+            /* 附件：CSV 里用"标题: 绝对地址"纯文本（导出视图会 strip_tags，HTML 链接会丢地址）。 */
+            $fileList = $this->dao->select('id,objectID,title')->from(TABLE_FILE)
+                ->where('objectType')->eq('testcase')
+                ->andWhere('objectID')->in(array_keys($cases))
+                ->fetchGroup('objectID');
+
+            $sysURL = common::getSysURL();
+            foreach($cases as $case)
+            {
+                /* 步骤合并为两列：两级编号、同一版本，与导入模板一致。 */
+                $case->stepDesc = $case->stepExpect = '';
+                if(isset($steps[$case->id]))
+                {
+                    $i = $childId = 0;
+                    foreach($steps[$case->id] as $step)
+                    {
+                        if($step->version != $case->version) continue;
+
+                        if($step->type == 'group' or $step->type == 'step')
+                        {
+                            $i++;
+                            $childId = 0;
+                            $stepId  = $i;
+                        }
+                        else
+                        {
+                            $stepId = $i . '.' . $childId;
+                        }
+
+                        $case->stepDesc   .= $stepId . '. ' . $step->desc . "\n";
+                        $case->stepExpect .= $stepId . '. ' . $step->expect . "\n";
+                        $childId++;
+                    }
+                    $case->stepDesc   = trim($case->stepDesc);
+                    $case->stepExpect = trim($case->stepExpect);
+                }
+
+                $case->module = isset($modules[$case->module]) ? $modules[$case->module] . "(#$case->module)" : '';
+
+                $stageList = array();
+                foreach(explode(',', (string)$case->stage) as $stage)
+                {
+                    $stage = trim($stage);
+                    if($stage === '') continue;
+                    $stageList[] = zget($caseLang->stageList, $stage, $stage);
+                }
+                $case->stage = join(',', $stageList);
+
+                $case->type = zget($caseLang->typeList, $case->type, $case->type);
+                $case->pri  = zget($caseLang->priList, $case->pri, $case->pri);
+
+                $case->openedBy     = zget($users, $case->openedBy, $case->openedBy);
+                $case->lastEditedBy = zget($users, $case->lastEditedBy, $case->lastEditedBy);
+
+                $case->files = '';
+                if(isset($fileList[$case->id]))
+                {
+                    $fileLines = array();
+                    foreach($fileList[$case->id] as $file) $fileLines[] = $file->title . ': ' . $sysURL . $this->createLink('file', 'download', "fileID={$file->id}");
+                    $case->files = join("\n", $fileLines);
+                }
+            }
+
+            $this->post->set('fields', $fields);
+            $this->post->set('kind', 'testcase');
+            $this->post->set('rows', $cases);
+            $this->fetch('file', 'export2' . $this->post->fileType, $_POST);
+        }
+
+        /* 导出对话框按当前模块（testsuite）取字段标签，用例字段标签来自 testcase，这里桥接过来。 */
+        $this->app->loadLang('testcase');
+        foreach(explode(',', $this->config->testsuite->exportFields) as $field)
+        {
+            $field = trim($field);
+            if(isset($this->lang->testcase->$field) and !isset($this->lang->testsuite->$field)) $this->lang->testsuite->$field = $this->lang->testcase->$field;
+        }
+
+        $this->view->allExportFields = $this->config->testsuite->exportFields;
+        $this->view->customExport    = true;
+        $this->view->libID           = $libID;
+        $this->view->orderBy         = $orderBy;
+        $this->view->browseType      = $browseType;
+        $this->display();
+    }
+
+    /**
      * Import case csv file.
      * 
      * @param  int    $libID 
@@ -751,51 +878,12 @@ class testsuite extends control
             $fileName = $this->file->savePath . $this->file->getSaveName($file['pathname']);
             move_uploaded_file($file['tmpname'], $fileName);
 
-            /* Excel 另存为 CSV 默认带 UTF-8 BOM，会让首列名匹配不上、进而被误判为 GBK 编码。 */
-            $content = file_get_contents($fileName);
-            if(substr($content, 0, 3) === "\xEF\xBB\xBF") file_put_contents($fileName, substr($content, 3));
-
-            $rows     = $this->file->parseCSV($fileName);
-            $fields   = $this->testcase->getImportFields($productID);
-            $fields   = array_flip($fields);
-            $header   = array();
-            foreach($rows[0] as $i => $rowValue)
-            {
-                if(empty($rowValue)) break;
-                $header[$i] = $rowValue;
-            }
-            unset($rows[0]);
-
-            $columnKey = array();
-            foreach($header as $title)
-            {
-                if(!isset($fields[$title])) continue;
-                $columnKey[] = $fields[$title];
-            }
-
-            if(count($columnKey) != count($header) or $this->post->encode != 'utf-8')
-            {
-                $fc     = file_get_contents($fileName);
-                $encode = $this->post->encode != "utf-8" ? $this->post->encode : 'gbk';
-                $fc     = helper::convertEncoding($fc, $encode, 'utf-8');
-                file_put_contents($fileName, $fc);
-
-                $rows      = $this->file->parseCSV($fileName);
-                $columnKey = array();
-                $header   = array();
-                foreach($rows[0] as $i => $rowValue)
-                {
-                    if(empty($rowValue)) break;
-                    $header[$i] = $rowValue;
-                }
-                unset($rows[0]);
-                foreach($header as $title)
-                {
-                    if(!isset($fields[$title])) continue;
-                    $columnKey[] = $fields[$title];
-                }
-                if(count($columnKey) != count($header)) die(js::alert($this->lang->testcase->errorEncode));
-            }
+            /* 走 file 通用导入层（剥 BOM + 编码转换 + 列名精确/宽松匹配）；
+               旧实现只做列名精确匹配，带 UTF-8 BOM 的文件会落到 gbk 兜底、
+               内容被按 gbk 再转一次变乱码，最后报「编码错误」。 */
+            $fields = $this->testcase->getImportFields($productID);
+            $parsed = $this->file->parseImportFile($fileName, $fields, $this->post->encode);
+            if(empty($parsed['columns'])) die(js::alert($this->lang->testcase->errorEncode));
 
             $this->session->set('importFile', $fileName);
 
@@ -838,30 +926,17 @@ class testsuite extends control
             unset($fields[$key]);
         }
 
-        $fields = array_flip($fields);
-        $rows   = $this->loadModel('file')->parseCSV($file);
-        $header = array();
-        foreach($rows[0] as $i => $rowValue)
-        {
-            if(empty($rowValue)) break;
-            $header[$i] = $rowValue;
-        }
-        unset($rows[0]);
+        $parsed  = $this->loadModel('file')->parseImportFile($file, $fields, $this->post->encode);
+        $columns = $parsed['columns'];
+        $rows    = $parsed['rows'];
 
-        foreach($header as $title)
-        {
-            if(!isset($fields[$title])) continue;
-            $columnKey[] = $fields[$title];
-        }
-
-        $endField = end($fields);
         $caseData = array();
         $stepData = array();
         $stepVars = 0;
         foreach($rows as $row => $data)
         {
             $case = new stdclass();
-            foreach($columnKey as $key => $field)
+            foreach($columns as $key => $field)
             {
                 if(!isset($data[$key])) continue;
                 $cellValue = $data[$key];

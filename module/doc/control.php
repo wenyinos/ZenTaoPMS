@@ -283,7 +283,7 @@ class doc extends control
      * @access public
      * @return void
      */
-    public function create($libID, $moduleID = 0)
+    public function create($libID, $moduleID = 0, $templateID = 0)
     {
         if(!empty($_POST))
         {
@@ -340,6 +340,7 @@ class doc extends control
         $this->view->type             = $type;
         $this->view->groups           = $this->loadModel('group')->getPairs();
         $this->view->users            = $this->user->getPairs('nocode');
+        $this->view->template         = $templateID ? $this->doc->getById($templateID, 0, true) : false;
 
         $this->display();
     }
@@ -434,6 +435,9 @@ class doc extends control
         $this->view->users      = $this->user->getPairs('noclosed,noletter');
         $this->view->preAndNext = $this->loadModel('common')->getPreAndNextObject('doc', $docID);
         $this->view->keTableCSS = $this->doc->extractKETableCSS($doc->content);
+
+        /* 记录浏览动作：供「最近浏览」取数，并让 views 自增（4 秒内重复不重复记）。 */
+        $this->doc->createAction($docID, 'view');
 
         $this->display();
     }
@@ -793,5 +797,336 @@ class doc extends control
         $this->view->from   = $from;
         $this->view->libs   = $this->doc->getLibsByObject($type, $objectID);
         $this->display();
+    }
+
+    /**
+     * Sort the doc categories of one lib.
+     *
+     * 目录复用 zt_module，排序直接转调 tree::updateOrder（它会按 parent/grade 归一为 10 的倍数）。
+     *
+     * @access public
+     * @return void
+     */
+    public function sortCatalog()
+    {
+        if($_POST)
+        {
+            $orders = json_decode($this->post->orders, true);
+            if(!is_array($orders)) $orders = array();
+
+            $data = array();
+            foreach($orders as $moduleID => $order)
+            {
+                if(!is_numeric($moduleID) or !is_numeric($order)) continue;
+                $data[$moduleID] = $order;
+            }
+            if($data) $this->loadModel('tree')->updateOrder($data);
+            if(dao::isError()) $this->send(array('result' => 'fail', 'message' => dao::getError()));
+            $this->send(array('result' => 'success'));
+        }
+    }
+
+    /**
+     * Sort the docs of one lib.
+     *
+     * @access public
+     * @return void
+     */
+    public function sortDoc()
+    {
+        if($_POST)
+        {
+            $orders = json_decode($this->post->orders, true);
+            if(!is_array($orders)) $orders = array();
+
+            $this->doc->updateDocOrder($orders);
+            if(dao::isError()) $this->send(array('result' => 'fail', 'message' => dao::getError()));
+            $this->send(array('result' => 'success'));
+        }
+    }
+
+    /**
+     * Move a doc to another lib / module.
+     *
+     * @param  int    $docID
+     * @param  int    $libID
+     * @access public
+     * @return void
+     */
+    public function moveDoc($docID, $libID = 0)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('module', 0)->get();
+            if($this->doc->moveDoc($docID, $data))
+            {
+                $this->loadModel('action')->create('doc', $docID, 'Moved', '');
+                $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'load' => true));
+            }
+            $this->send(array('result' => 'fail', 'message' => dao::getError()));
+        }
+
+        $this->view->doc   = $this->doc->getById($docID);
+        $this->view->libID = $libID;
+        $this->view->libs  = $this->doc->getLibs('all');
+        $this->display();
+    }
+
+    /**
+     * Copy a doc to another lib / module.
+     *
+     * @param  int    $docID
+     * @param  int    $libID
+     * @access public
+     * @return void
+     */
+    public function copyDoc($docID, $libID = 0)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('module', 0)->get();
+            $newID = $this->doc->copyDoc($docID, $data);
+            if($newID)
+            {
+                $this->loadModel('action')->create('doc', $newID, 'Copied', '');
+                $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'load' => true));
+            }
+            $this->send(array('result' => 'fail', 'message' => dao::getError()));
+        }
+
+        $this->view->doc   = $this->doc->getById($docID);
+        $this->view->libID = $libID;
+        $this->view->libs  = $this->doc->getLibs('all');
+        $this->display();
+    }
+
+    /**
+     * Batch move docs.
+     *
+     * @param  string $encodeDocIdList
+     * @param  int    $libID
+     * @param  int    $moduleID
+     * @access public
+     * @return void
+     */
+    public function batchMoveDoc($encodeDocIdList, $libID = 0, $moduleID = 0)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('module', 0)->get();
+            $docIdList = json_decode(base64_decode($encodeDocIdList), true);
+            if(!is_array($docIdList)) $docIdList = array();
+
+            $moved = 0;
+            foreach($docIdList as $docID)
+            {
+                if(!is_numeric($docID)) continue;
+                if($this->doc->moveDoc($docID, $data))
+                {
+                    $this->loadModel('action')->create('doc', $docID, 'Moved', '');
+                    $moved++;
+                }
+            }
+            if($moved) $this->send(array('result' => 'success', 'message' => sprintf($this->lang->doc->batchMoveResult, $moved), 'closeModal' => true, 'load' => true));
+            $this->send(array('result' => 'fail', 'message' => array('batchMove' => array($this->lang->doc->batchMoveFailed))));
+        }
+
+        $this->view->docIdList = base64_decode($encodeDocIdList);
+        $this->view->libID     = $libID;
+        $this->view->moduleID  = $moduleID;
+        $this->view->libs      = $this->doc->getLibs('all');
+        $this->display();
+    }
+
+    /**
+     * Browse the doc templates.
+     *
+     * 模板挂在 type='template' 的 doclib 上，分类复用 zt_module（type='docTemplate'）。
+     * 带 libID 进来时每行多一个「用此模板新建文档」，落到该库的 create。
+     *
+     * @param  int    $libID       目标库（用于「用此模板新建」）
+     * @param  int    $moduleID    目标目录
+     * @param  int    $typeModule  按分类过滤
+     * @param  string $orderBy
+     * @param  int    $recTotal
+     * @param  int    $recPerPage
+     * @param  int    $pageID
+     * @access public
+     * @return void
+     */
+    public function browseTemplate($libID = 0, $moduleID = 0, $typeModule = 0, $orderBy = 'id_desc', $recTotal = 0, $recPerPage = 20, $pageID = 1)
+    {
+        $scope = $this->doc->getTemplateLibID();
+        if(!$scope) die(js::error($this->lang->doc->error->noTemplateLib) . js::locate('back'));
+
+        $this->app->loadClass('pager', $static = true);
+        $pager = new pager($recTotal, $recPerPage, $pageID);
+
+        $templates = $this->doc->getDocTemplateList($scope, $orderBy, $pager);
+
+        /* 分类树：把模板按 module 归组，视图里渲染成侧栏。 */
+        $modules = $this->doc->getTemplateModules();
+        $grouped = array();
+        foreach($templates as $template)
+        {
+            $key = $template->module ? $template->module : 0;
+            if($typeModule and $key != $typeModule) continue;
+            $grouped[$key][$template->id] = $template;
+        }
+
+        $this->doc->setMenu('custom', 0, 0, 0, 0);
+
+        $this->view->title      = $this->lang->doc->browseTemplate;
+        $this->view->position[] = $this->lang->doc->browseTemplate;
+        $this->view->scope      = $scope;
+        $this->view->templates  = $templates;
+        $this->view->grouped    = $grouped;
+        $this->view->modules    = $modules;
+        $this->view->typeModule = $typeModule;
+        $this->view->libID      = $libID;
+        $this->view->moduleID   = $moduleID;
+        $this->view->orderBy    = $orderBy;
+        $this->view->pager      = $pager;
+        $this->view->users       = $this->loadModel('user')->getPairs('noletter');
+        $this->view->modulePairs = $this->getTemplateModulePairs();
+        $this->display();
+    }
+
+    /**
+     * Create a template.
+     *
+     * @param  int    $moduleID
+     * @access public
+     * @return void
+     */
+    public function createTemplate($moduleID = 0)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('keywords', '')->get();
+            $templateID = $this->doc->createTemplate($data);
+            if(!$templateID) $this->send(array('result' => 'fail', 'message' => dao::getError()));
+            $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'load' => true));
+        }
+
+        $this->view->title     = $this->lang->doc->createTemplate;
+        $this->view->template  = false;
+        $this->view->moduleID  = $moduleID;
+        $this->view->modules   = $this->getTemplateModulePairs();
+        $this->display();
+    }
+
+    /**
+     * Edit a template.
+     *
+     * @param  int    $templateID
+     * @access public
+     * @return void
+     */
+    public function editTemplate($templateID)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('keywords', '')->get();
+            $this->doc->updateTemplate($templateID, $data);
+            if(dao::isError()) $this->send(array('result' => 'fail', 'message' => dao::getError()));
+            $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'load' => true));
+        }
+
+        $template = $this->doc->getById($templateID, 0, true);
+        if(!$template) die(js::error($this->lang->notFound) . js::locate('back'));
+
+        $this->view->title    = $this->lang->doc->editTemplate;
+        $this->view->template = $template;
+        $this->view->moduleID = $template->module;
+        $this->view->modules  = $this->getTemplateModulePairs();
+        $this->display('doc', 'createtemplate');
+    }
+
+    /**
+     * Delete a template.
+     *
+     * @param  int    $templateID
+     * @param  string $confirm
+     * @access public
+     * @return void
+     */
+    public function deleteTemplate($templateID, $confirm = 'no')
+    {
+        if($confirm == 'no') die(js::confirm($this->lang->doc->confirmDeleteTemplate, inlink('deleteTemplate', "templateID=$templateID&confirm=yes")));
+
+        $this->doc->deleteTemplate($templateID);
+        die(js::reload('parent'));
+    }
+
+    /**
+     * Add a template category.
+     *
+     * @param  int    $scope
+     * @param  int    $parentModule
+     * @access public
+     * @return void
+     */
+    public function addTemplateType($scope = 0, $parentModule = 0)
+    {
+        if($_POST)
+        {
+            $data = fixer::input('post')->setDefault('parent', 0)->get();
+            if($this->doc->addTemplateType($data))
+            {
+                $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'load' => true));
+            }
+            $this->send(array('result' => 'fail', 'message' => dao::getError()));
+        }
+
+        $this->view->parentModule = $parentModule;
+        $this->view->title        = $this->lang->doc->addTemplateType;
+        $this->display();
+    }
+
+    /**
+     * Edit a template category.
+     *
+     * 分类就是 zt_module，直接复用 tree 模块的编辑弹窗。
+     *
+     * @param  int    $moduleID
+     * @access public
+     * @return void
+     */
+    public function editTemplateType($moduleID)
+    {
+        echo $this->fetch('tree', 'edit', "moduleID={$moduleID}&type=docTemplate");
+    }
+
+    /**
+     * Delete a template category.
+     *
+     * @param  int    $moduleID
+     * @param  string $confirm
+     * @access public
+     * @return void
+     */
+    public function deleteTemplateType($moduleID, $confirm = 'no')
+    {
+        $templates = $this->doc->getTemplatesByType($moduleID);
+        if(!empty($templates)) die(js::alert($this->lang->doc->error->templateTypeNotEmpty));
+
+        if($confirm == 'no') die(js::confirm($this->lang->doc->confirmDeleteType, inlink('deleteTemplateType', "moduleID=$moduleID&confirm=yes")));
+
+        $this->dao->update(TABLE_MODULE)->set('deleted')->eq(1)->where('id')->eq($moduleID)->exec();
+        die(js::reload('parent'));
+    }
+
+    /**
+     * Template categories as id => name pairs.
+     *
+     * @access public
+     * @return array
+     */
+    public function getTemplateModulePairs()
+    {
+        $pairs = array(0 => '/');
+        foreach($this->doc->getTemplateModules() as $module) $pairs[$module->id] = $module->name;
+        return $pairs;
     }
 }

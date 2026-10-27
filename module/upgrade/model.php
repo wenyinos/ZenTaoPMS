@@ -28,15 +28,416 @@ class upgradeModel extends model
         /* 补充 9.9.0 新增的文档收藏字段（幂等：旧库用旧版 zentao.sql 安装时缺 collector 列）。 */
         $this->addCollectorColumns();
 
+        /* 9.10.0 新增：错误日志两张表 + 清理定时任务（幂等，任意来源版本都会补齐）。 */
+        $this->addErrorLogTables();
+        $this->addErrorLogCron();
+
+        /* 9.10.0 新增：透视表三张表（幂等）。 */
+        $this->createPivotTables();
+
+        /* 9.10.0 新增：文档增强（文档排序列、文档库类型列、浏览动作表、模板库种子）。 */
+        $this->addDocOrderColumn();
+        $this->addDoclibTypeColumn();
+        $this->createDocActionTable();
+        $this->seedTemplateLib();
+
+        /* 9.10.3 新增：代码平台 Webhook 接收端两张表（幂等）。 */
+        $this->createRepoHookTables();
+
         switch($fromVersion)
         {
             case '9_8_3_1':
-                /* 9.9.0 相对 9.8.3_1 无其他数据库结构变更。 */
+            case '9_9_0':
+            case '9_9_1':
+                /* 本版新增的库结构由上方幂等方法按需补齐（支持跨版本跳跃升级，见计划 §1.4）。 */
                 break;
         }
 
         $this->deletePatch();
         $this->clearModelCache();
+    }
+
+    /**
+     * Create the errorlog tables (idempotent).
+     *
+     * 9.10.0 新增：错误本体 zt_errorlog + 请求上下文 zt_errorlogreq。
+     * 用 information_schema 探测 + CREATE TABLE IF NOT EXISTS 双保险；可重复执行。
+     * 注意：本仓库允许跨版本跳跃升级（缺省来源版本不执行 case 分支），
+     * 故 DDL 一律放在 execute() 顶部按需补齐，见计划 §1.4。
+     *
+     * @access public
+     * @return void
+     */
+    public function addErrorLogTables()
+    {
+        $tables = array(
+            'errorlog' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `md5` char(32) NOT NULL DEFAULT '',
+  `file` varchar(255) NOT NULL DEFAULT '',
+  `line` int unsigned NOT NULL DEFAULT '0',
+  `level` smallint unsigned NOT NULL DEFAULT '0',
+  `message` text,
+  `trace` text,
+  PRIMARY KEY (`md5`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8",
+            'errorlogreq' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `requestID` varchar(64) NOT NULL DEFAULT '',
+  `md5` char(32) NOT NULL DEFAULT '',
+  `module` varchar(30) NOT NULL DEFAULT '',
+  `method` varchar(100) NOT NULL DEFAULT '',
+  `account` varchar(30) NOT NULL DEFAULT '',
+  `url` varchar(255) NOT NULL DEFAULT '',
+  `createdDate` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_requestID_md5` (`requestID`,`md5`),
+  KEY `idx_requestID` (`requestID`),
+  KEY `idx_md5` (`md5`),
+  KEY `idx_createdDate` (`createdDate`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8",
+        );
+
+        foreach($tables as $suffix => $sql)
+        {
+            $tableName = $this->config->db->prefix . $suffix;
+            $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.tables')
+                ->where('table_schema')->eq($this->config->db->name)
+                ->andWhere('table_name')->eq($tableName)
+                ->fetch('count');
+            if($exists) continue;
+
+            try
+            {
+                $this->dbh->exec(sprintf($sql, $tableName));
+            }
+            catch (PDOException $e)
+            {
+                self::$errors[] = $e->getMessage() . "<p>The sql is: CREATE TABLE {$tableName}</p>";
+            }
+        }
+    }
+
+    /**
+     * Create the pivot tables (idempotent).
+     *
+     * 9.10.0 透视表：zt_pivot（定义）+ zt_pivotspec（历史版本）+ zt_pivotdrill（下钻，一期只读留桩）。
+     * 相对 22.6 原表删掉了 driver/mode/step/stage/acl/whitelist/objects 列（只支持 mysql、
+     * 无工作流、只做登录可见、不做下钻 UI）。
+     *
+     * @access public
+     * @return void
+     */
+    public function createPivotTables()
+    {
+        $tables = array(
+            'pivot' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `code` varchar(45) NOT NULL DEFAULT '',
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `desc` text NOT NULL,
+  `group` varchar(45) NOT NULL DEFAULT '',
+  `sql` text NOT NULL,
+  `fields` text NOT NULL,
+  `langs` text NOT NULL,
+  `settings` text NOT NULL,
+  `filters` text NOT NULL,
+  `vars` text NOT NULL,
+  `builtin` tinyint(1) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `group` (`group`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+            'pivotspec' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `pivot` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `desc` text NOT NULL,
+  `sql` text NOT NULL,
+  `fields` text NOT NULL,
+  `langs` text NOT NULL,
+  `vars` text NOT NULL,
+  `settings` text NOT NULL,
+  `filters` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pivot` (`pivot`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+            'pivotdrill' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `pivot` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `field` varchar(255) NOT NULL DEFAULT '',
+  `object` varchar(40) NOT NULL DEFAULT '',
+  `whereSql` mediumtext NOT NULL,
+  `condition` mediumtext NOT NULL,
+  `status` varchar(10) NOT NULL DEFAULT 'published',
+  `account` varchar(30) NOT NULL DEFAULT '',
+  `type` varchar(10) NOT NULL DEFAULT 'manual',
+  PRIMARY KEY (`id`),
+  KEY `pivot` (`pivot`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+        );
+
+        foreach($tables as $suffix => $sql)
+        {
+            $tableName = $this->config->db->prefix . $suffix;
+            $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.tables')
+                ->where('table_schema')->eq($this->config->db->name)
+                ->andWhere('table_name')->eq($tableName)
+                ->fetch('count');
+            if($exists) continue;
+
+            try
+            {
+                $this->dbh->exec(sprintf($sql, $tableName));
+            }
+            catch (PDOException $e)
+            {
+                self::$errors[] = $e->getMessage() . "<p>The sql is: CREATE TABLE {$tableName}</p>";
+            }
+        }
+    }
+
+    /**
+     * 9.10.3 代码平台 Webhook：zt_repohook（接收端配置）+ zt_repohooklog（排障日志）。
+     * 幂等（information_schema 探测 + CREATE TABLE IF NOT EXISTS），可重复执行。
+     *
+     * @access public
+     * @return void
+     */
+    public function createRepoHookTables()
+    {
+        $tables = array(
+            'repohook' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `provider` varchar(20) NOT NULL DEFAULT 'github',
+  `token` varchar(64) NOT NULL DEFAULT '',
+  `secret` varchar(255) NOT NULL DEFAULT '',
+  `product` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `status` enum('normal','closed') NOT NULL DEFAULT 'normal',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+            'repohooklog' => "CREATE TABLE IF NOT EXISTS `%s` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `hookID` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `event` varchar(40) NOT NULL DEFAULT '',
+  `payload` text NOT NULL,
+  `result` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `hookID` (`hookID`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8",
+        );
+
+        foreach($tables as $suffix => $sql)
+        {
+            $tableName = $this->config->db->prefix . $suffix;
+            $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.tables')
+                ->where('table_schema')->eq($this->config->db->name)
+                ->andWhere('table_name')->eq($tableName)
+                ->fetch('count');
+            if($exists) continue;
+
+            try
+            {
+                $this->dbh->exec(sprintf($sql, $tableName));
+            }
+            catch (PDOException $e)
+            {
+                self::$errors[] = $e->getMessage() . "<p>The sql is: CREATE TABLE {$tableName}</p>";
+            }
+        }
+    }
+
+    /**
+     * Add the doc order column (idempotent).
+     *
+     * 9.10.0 文档增强：zt_doc.order 用于文档列表拖拽排序。`order` 是 MySQL 保留字，
+     * SQL 里一律加反引号。可重复执行。
+     *
+     * @access public
+     * @return void
+     */
+    public function addDocOrderColumn()
+    {
+        $tableName = trim(TABLE_DOC, '`');
+        $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.columns')
+            ->where('table_schema')->eq($this->config->db->name)
+            ->andWhere('table_name')->eq($tableName)
+            ->andWhere('column_name')->eq('order')
+            ->fetch('count');
+        if($exists) return;
+
+        try
+        {
+            $this->dbh->exec("ALTER TABLE `{$tableName}` ADD COLUMN `order` int unsigned NOT NULL DEFAULT 0");
+            $this->dbh->exec("UPDATE `{$tableName}` SET `order` = `id` WHERE `order` = 0");
+        }
+        catch (PDOException $e)
+        {
+            self::$errors[] = $e->getMessage() . '<p>The sql is: ALTER TABLE zt_doc ADD order</p>';
+        }
+    }
+
+    /**
+     * Add the doclib type column (idempotent).
+     *
+     * 9.10.0 文档增强：zt_doclib.type 区分普通库与「文档模板」范围库。
+     * 默认空串，既有库行为不变。可重复执行。
+     *
+     * @access public
+     * @return void
+     */
+    public function addDoclibTypeColumn()
+    {
+        $tableName = trim(TABLE_DOCLIB, '`');
+        $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.columns')
+            ->where('table_schema')->eq($this->config->db->name)
+            ->andWhere('table_name')->eq($tableName)
+            ->andWhere('column_name')->eq('type')
+            ->fetch('count');
+        if($exists) return;
+
+        try
+        {
+            $this->dbh->exec("ALTER TABLE `{$tableName}` ADD COLUMN `type` varchar(30) NOT NULL DEFAULT ''");
+        }
+        catch (PDOException $e)
+        {
+            self::$errors[] = $e->getMessage() . '<p>The sql is: ALTER TABLE zt_doclib ADD type</p>';
+        }
+    }
+
+    /**
+     * Create the doc action table (idempotent).
+     *
+     * 9.10.0 文档增强：zt_docaction 记录浏览/收藏动作，供「最近浏览」取数。
+     *
+     * @access public
+     * @return void
+     */
+    public function createDocActionTable()
+    {
+        $tableName = $this->config->db->prefix . 'docaction';
+        $exists = $this->dao->select('COUNT(*) AS count')->from('information_schema.tables')
+            ->where('table_schema')->eq($this->config->db->name)
+            ->andWhere('table_name')->eq($tableName)
+            ->fetch('count');
+        if($exists) return;
+
+        $sql = "CREATE TABLE IF NOT EXISTS `{$tableName}` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `doc` int unsigned NOT NULL DEFAULT 0,
+  `action` varchar(80) NOT NULL DEFAULT '',
+  `actor` varchar(30) NOT NULL DEFAULT '',
+  `date` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `doc` (`doc`),
+  KEY `actor` (`actor`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8";
+
+        try
+        {
+            $this->dbh->exec($sql);
+        }
+        catch (PDOException $e)
+        {
+            self::$errors[] = $e->getMessage() . '<p>The sql is: CREATE TABLE ' . $tableName . '</p>';
+        }
+    }
+
+    /**
+     * Seed the doc template lib (idempotent).
+     *
+     * 9.10.0 文档增强：模板必须挂在 doclib 上，故建一个 type='template' 的范围库。
+     * 已有同类库时跳过，保证重复升级不产生第二行。
+     *
+     * @access public
+     * @return void
+     */
+    public function seedTemplateLib()
+    {
+        $exists = $this->dao->select('COUNT(*) AS count')->from(TABLE_DOCLIB)
+            ->where('type')->eq('template')
+            ->fetch('count');
+        if($exists) return;
+
+        $lib = new stdclass();
+        $lib->product   = 0;
+        $lib->project   = 0;
+        $lib->name      = '文档模板';
+        $lib->acl       = 'open';
+        $lib->groups    = '';
+        $lib->users     = '';
+        $lib->main      = '1';
+        $lib->collector = '';
+        $lib->order     = 0;
+        $lib->deleted   = '0';
+        $lib->type      = 'template';
+
+        try
+        {
+            $this->dao->insert(TABLE_DOCLIB)->data($lib)->exec();
+        }
+        catch (PDOException $e)
+        {
+            self::$errors[] = $e->getMessage() . '<p>The sql is: insert template doclib</p>';
+        }
+    }
+
+    /**
+     * Register the errorlog cleanup cron (idempotent).
+     *
+     * lastTime 必须是 '0000-00-00 00:00:00'：cron 模块的 checkChange() 以此为"新任务"判据，
+     * 否则运行中的常驻进程不会重载任务列表（见 module/cron/model.php）。
+     *
+     * @access public
+     * @return void
+     */
+    public function addErrorLogCron()
+    {
+        $command = 'moduleName=errorlog&methodName=deleteLog';
+
+        $exists = $this->dao->select('COUNT(*) AS count')->from(TABLE_CRON)
+            ->where('command')->eq($command)
+            ->fetch('count');
+        if($exists) return;
+
+        $cron = new stdclass();
+        $cron->m         = '*/5';
+        $cron->h         = '*';
+        $cron->dom       = '*';
+        $cron->mon       = '*';
+        $cron->dow       = '*';
+        $cron->command   = $command;
+        $cron->remark    = '删除过期错误日志';
+        $cron->type      = 'zentao';
+        $cron->buildin   = 1;
+        $cron->status    = 'normal';
+        $cron->lastTime  = '0000-00-00 00:00:00';
+
+        try
+        {
+            $this->dao->insert(TABLE_CRON)->data($cron)->exec();
+        }
+        catch (PDOException $e)
+        {
+            self::$errors[] = $e->getMessage() . '<p>The sql is: insert errorlog cron</p>';
+        }
     }
 
     /**
@@ -78,14 +479,21 @@ class upgradeModel extends model
      * 官方版本（9.8.3 及以下、10.x 等）不在升级支持范围：本版本业务核心取自
      * 9.8.3、界面取自 10.1，与任何单个官方发布版都不完全一致，直接升级可能损坏数据。
      *
+     * 允许的两条自研序列：
+     *   9.8.3_<n>        首个社区定制版起的定制序列
+     *   9.9.x 与 9.10.x+ 自研版本号（中段为 9 或两位数及以上）
+     *
+     * 拒绝的关键：官方 9.x 的中段是 0-8（如 9.8.3），官方 10.x 写作 10.x 而不是 9.10.x，
+     * 所以 `9.` 开头且中段为 `9` 或 `>= 10` 即必然是自研版本。
+     *
      * @param  string $version
      * @access public
      * @return bool
      */
     public function isWenyinVersion($version)
     {
-        if(preg_match('/^9\.8\.3_\d+$/', (string)$version)) return true;    // WenYinOS 定制序列（9.8.3_1 起）
-        if(preg_match('/^9\.9\.\d+$/', (string)$version))   return true;    // 9.9.0 起的自研版本号（官方无 9.9.x 发布号）
+        if(preg_match('/^9\.8\.3_\d+$/', (string)$version))            return true;    // WenYinOS 定制序列（9.8.3_1 起）
+        if(preg_match('/^9\.(?:9|[1-9]\d+)\.\d+$/', (string)$version)) return true;    // 9.9.x 与 9.10.x 起的自研序列
         return false;
     }
 
@@ -137,7 +545,7 @@ body{font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-s
 <div class='box'>
   <h3>无法升级</h3>
   <p>检测到当前数据库版本为 <strong>{$installedVersion}</strong>，它不属于本社区版（WenYinOS ZenTaoPMS）支持的升级来源，升级已被拒绝。</p>
-  <p>本项目仅支持从 <strong>9.8.3_1</strong>（首个社区定制版）及后续自研版本（9.9.x）升级。官方禅道版本（9.8.3 及以下、10.x 等）不在兼容范围内——本版本业务核心取自 9.8.3、界面取自 10.1，与任何单个官方发布版都不完全一致，直接升级可能造成数据损坏。</p>
+  <p>本项目仅支持从 <strong>9.8.3_1</strong>（首个社区定制版）及后续自研版本（<strong>9.9.x</strong>、<strong>9.10.x 及以上</strong>）升级。官方禅道版本（9.8.3 及以下、10.x 等）不在兼容范围内——本版本业务核心取自 9.8.3、界面取自 10.1，与任何单个官方发布版都不完全一致，直接升级可能造成数据损坏。</p>
   <p class='tip'>如果你正在使用官方禅道，请先通过官方升级流程升级到官方最新版，或联系维护者评估迁移方案。</p>
   <a href='index.php'>返回首页</a>
 </div>

@@ -165,3 +165,30 @@ $lang->doclib->product = $lang->productCommon . '庫';
 
 $lang->doclib->main['product'] = $lang->productCommon . '主庫';
 $lang->doclib->main['project'] = $lang->projectCommon . '主庫';
+/* 文件增強：排序 / 移動 / 複製 / 最近瀏覽。 */
+$lang->doc->moveDoc         = '移動文件';
+$lang->doc->copyDoc         = '複製文件';
+$lang->doc->batchMoveDoc    = '批量移動';
+$lang->doc->copySuffix      = '（副本）';
+$lang->doc->copyTip         = '複製後正文為來源文件最新版，瀏覽數與收藏不繼承，附件暫不複製。';
+$lang->doc->batchMoveResult = '已移動 %s 個文件。';
+$lang->doc->batchMoveFailed = '沒有可移動的文件。';
+$lang->doc->sortCatalog     = '目錄排序';
+$lang->doc->sortDoc         = '文件排序';
+$lang->doc->sortTip         = '拖動後順序自動保存。';
+$lang->doc->visitedbyme     = '最近瀏覽';
+/* 文件範本。 */
+$lang->doc->browseTemplate       = '文件範本';
+$lang->doc->createTemplate       = '新建範本';
+$lang->doc->editTemplate         = '編輯範本';
+$lang->doc->createFromTemplate   = '用此範本新建文件';
+$lang->doc->addTemplateType      = '新建分類';
+$lang->doc->allTypes             = '全部分類';
+$lang->doc->noTemplate           = '還沒有範本。';
+$lang->doc->typeName             = '分類名稱';
+$lang->doc->parentType           = '上級分類';
+$lang->doc->confirmDeleteTemplate = '確定刪除該範本嗎？';
+$lang->doc->confirmDeleteType    = '確定刪除該分類嗎？';
+if(!isset($lang->doc->error)) $lang->doc->error = new stdclass();
+$lang->doc->error->noTemplateLib     = '沒找到文件範本庫，請先執行升級。';
+$lang->doc->error->templateTypeNotEmpty = '該分類下還有範本，請先移走或刪除。';

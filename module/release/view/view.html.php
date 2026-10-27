@@ -32,6 +32,7 @@
     {
         if(common::hasPriv('release', 'linkStory')) echo html::a(inlink('view', "releaseID=$release->id&type=story&link=true"), '<i class="icon-link"></i> ' . $lang->release->linkStory, '', "class='btn btn-link'");
         if(common::hasPriv('release', 'linkBug') and $config->global->flow != 'onlyStory') echo html::a(inlink('view', "releaseID=$release->id&type=bug&link=true"),   '<i class="icon-bug"></i> '  . $lang->release->linkBug,   '', "class='btn btn-link'");
+        echo html::a(inlink('changelog', "releaseID=$release->id"), '<i class="icon-copy"></i> ' . $lang->release->changelog, '', "class='btn btn-link'");
 
         if(common::hasPriv('release', 'changeStatus', $release))
         {

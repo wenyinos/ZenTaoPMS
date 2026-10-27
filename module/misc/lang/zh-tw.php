@@ -95,7 +95,7 @@ $lang->misc->feature->all['9.8.stable'][] = array('title'=>'項目可以選擇�
 
 $lang->misc->feature->all['9.7.stable'][] = array('title'=>'調整國際版，增加英文Demo數據。', 'desc' => '');
 
-$lang->misc->feature->all['9.6.stable'][] = array('title'=>'新增了webhook功能', 'desc' => '實現與倍冾、釘釘的消息通知介面');
+$lang->misc->feature->all['9.6.stable'][] = array('title'=>'新增了webhook功能', 'desc' => '實現與第三方系統的消息通知介面');
 $lang->misc->feature->all['9.6.stable'][] = array('title'=>'新增禪道操作獲取積分的功能', 'desc' => '');
 $lang->misc->feature->all['9.6.stable'][] = array('title'=>'項目任務新增了多人任務和子任務功能', 'desc' => '');
 $lang->misc->feature->all['9.6.stable'][] = array('title'=>'產品視圖新增了產品綫功能', 'desc' => '');

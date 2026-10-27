@@ -115,6 +115,8 @@ $lang->project->latestDynamic     = 'Latest Dynamic';
 $lang->project->build             = 'Builds';
 $lang->project->testtask          = 'Test Tasks';
 $lang->project->burn              = 'Burndown';
+$lang->project->gantt             = 'Gantt';
+$lang->project->ganttEmpty        = 'No tasks to display (a task needs both estimated start and deadline).';
 $lang->project->computeBurn       = 'Update';
 $lang->project->burnData          = 'Burndown Data';
 $lang->project->fixFirst          = 'Edit Man-hour of 1st Day';
@@ -173,6 +175,7 @@ $lang->project->groups['pri']        = 'By Priority';
 $lang->project->groups['assignedTo'] = 'By AssignedTo';
 $lang->project->groups['finishedBy'] = 'By FinishedBy';
 $lang->project->groups['closedBy']   = 'By ClosedBy';
+$lang->project->groups['module']       = 'By Module';
 $lang->project->groups['type']       = 'By Type';
 
 $lang->project->groupFilter['story']['all']         = $lang->project->all;
@@ -272,6 +275,10 @@ $lang->project->orderList['pri_desc']   = "Priority Desc";
 $lang->project->orderList['stage_asc']  = "Phase Asc";
 $lang->project->orderList['stage_desc'] = "Phase Desc";
 
+$lang->project->kanbanNoLane = 'Ungrouped';
+$lang->project->kanbanOrderFailed = 'Failed to save the kanban order, please refresh and try again.';
+$lang->project->track           = 'Requirement Matrix';
+$lang->project->trackIteration  = 'Iteration';
 $lang->project->kanban        = "Kanban";
 $lang->project->kanbanSetting = "Kanban Setting";
 $lang->project->resetKanban   = "Reset Setting";

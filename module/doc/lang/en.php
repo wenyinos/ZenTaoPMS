@@ -165,3 +165,30 @@ $lang->doclib->product = $lang->productCommon . ' Library';
 
 $lang->doclib->main['product'] =  'Main Library';
 $lang->doclib->main['project'] =  'Main Library';
+/* Doc enhancement: sort / move / copy / visited. */
+$lang->doc->moveDoc         = 'Move Doc';
+$lang->doc->copyDoc         = 'Copy Doc';
+$lang->doc->batchMoveDoc    = 'Batch Move';
+$lang->doc->copySuffix      = '(Copy)';
+$lang->doc->copyTip         = 'The copy keeps the latest content of the source. Views and collectors are not inherited, attachments are not copied yet.';
+$lang->doc->batchMoveResult = '%s doc(s) moved.';
+$lang->doc->batchMoveFailed = 'No doc to move.';
+$lang->doc->sortCatalog     = 'Sort Categories';
+$lang->doc->sortDoc         = 'Sort Docs';
+$lang->doc->sortTip         = 'The order is saved automatically after dragging.';
+$lang->doc->visitedbyme     = 'Recently Visited';
+/* Doc templates. */
+$lang->doc->browseTemplate       = 'Doc Templates';
+$lang->doc->createTemplate       = 'Create Template';
+$lang->doc->editTemplate         = 'Edit Template';
+$lang->doc->createFromTemplate   = 'Create doc from this template';
+$lang->doc->addTemplateType      = 'Add Category';
+$lang->doc->allTypes             = 'All Categories';
+$lang->doc->noTemplate           = 'No template yet.';
+$lang->doc->typeName             = 'Category name';
+$lang->doc->parentType           = 'Parent category';
+$lang->doc->confirmDeleteTemplate = 'Delete this template?';
+$lang->doc->confirmDeleteType    = 'Delete this category?';
+if(!isset($lang->doc->error)) $lang->doc->error = new stdclass();
+$lang->doc->error->noTemplateLib     = 'Template lib not found, please run the upgrade first.';
+$lang->doc->error->templateTypeNotEmpty = 'This category still has templates, move or delete them first.';

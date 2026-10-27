@@ -256,6 +256,7 @@ CREATE TABLE IF NOT EXISTS `zt_doc` (
   `type` varchar(30) NOT NULL,
   `views` smallint(5) unsigned NOT NULL,
   `collector` text NOT NULL,
+  `order` int unsigned NOT NULL DEFAULT 0,
   `addedBy` varchar(30) NOT NULL,
   `addedDate` datetime NOT NULL,
   `editedBy` varchar(30) NOT NULL,
@@ -294,6 +295,7 @@ CREATE TABLE IF NOT EXISTS `zt_doclib` (
   `collector` text NOT NULL,
   `order` tinyint(5) unsigned NOT NULL,
   `deleted` enum('0','1') NOT NULL default '0',
+  `type` varchar(30) NOT NULL DEFAULT '',
   PRIMARY KEY  (`id`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 -- DROP TABLE IF EXISTS `zt_effort`;
@@ -893,6 +895,33 @@ CREATE TABLE IF NOT EXISTS `zt_webhookdatas` (
   PRIMARY KEY `id` (`id`),
   UNIQUE KEY `uniq` (`webhook`, `action`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_errorlog`;
+CREATE TABLE IF NOT EXISTS `zt_errorlog` (
+  `md5` char(32) NOT NULL DEFAULT '',
+  `file` varchar(255) NOT NULL DEFAULT '',
+  `line` int unsigned NOT NULL DEFAULT '0',
+  `level` smallint unsigned NOT NULL DEFAULT '0',
+  `message` text,
+  `trace` text,
+  PRIMARY KEY (`md5`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_errorlogreq`;
+CREATE TABLE IF NOT EXISTS `zt_errorlogreq` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `requestID` varchar(64) NOT NULL DEFAULT '',
+  `md5` char(32) NOT NULL DEFAULT '',
+  `module` varchar(30) NOT NULL DEFAULT '',
+  `method` varchar(100) NOT NULL DEFAULT '',
+  `account` varchar(30) NOT NULL DEFAULT '',
+  `url` varchar(255) NOT NULL DEFAULT '',
+  `createdDate` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_requestID_md5` (`requestID`,`md5`),
+  KEY `idx_requestID` (`requestID`),
+  KEY `idx_md5` (`md5`),
+  KEY `idx_createdDate` (`createdDate`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 -- DROP TABLE IF EXISTS `zt_log`;
 CREATE TABLE IF NOT EXISTS `zt_log` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
@@ -935,6 +964,7 @@ INSERT INTO `zt_cron` (`m`, `h`, `dom`, `mon`, `dow`, `command`, `remark`, `type
 ('*/5',  '*',    '*',    '*',    '*',    'moduleName=mail&methodName=asyncSend',      '异步发信',        'zentao', 1, 'normal', '0000-00-00 00:00:00'),
 ('*/5',  '*',    '*',    '*',    '*',    'moduleName=webhook&methodName=asyncSend',   '异步发送Webhook', 'zentao', 1, 'normal', '0000-00-00 00:00:00'),
 ('*/5',  '*',    '*',    '*',    '*',    'moduleName=admin&methodName=deleteLog',     '删除过期日志',    'zentao', 1, 'normal', '0000-00-00 00:00:00'),
+('*/5', '*', '*', '*', '*', 'moduleName=errorlog&methodName=deleteLog', '删除过期错误日志', 'zentao', 1, 'normal', '0000-00-00 00:00:00'),
 ('1',    '1',    '*',    '*',    '*',    'moduleName=todo&methodName=createCycle',    '生成周期性待办',  'zentao', 1, 'normal', '0000-00-00 00:00:00');
 
 INSERT INTO `zt_group` (`id`, `name`, `role`, `desc`) VALUES
@@ -3366,3 +3396,100 @@ INSERT INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (11, 'user', 'todo'),
 (11, 'user', 'view'),
 (12, 'my', 'limited');
+
+-- DROP TABLE IF EXISTS `zt_docaction`;
+CREATE TABLE IF NOT EXISTS `zt_docaction` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `doc` int unsigned NOT NULL DEFAULT 0,
+  `action` varchar(80) NOT NULL DEFAULT '',
+  `actor` varchar(30) NOT NULL DEFAULT '',
+  `date` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `doc` (`doc`),
+  KEY `actor` (`actor`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+-- DROP TABLE IF EXISTS `zt_pivot`;
+CREATE TABLE IF NOT EXISTS `zt_pivot` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `code` varchar(45) NOT NULL DEFAULT '',
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `desc` text NOT NULL,
+  `group` varchar(45) NOT NULL DEFAULT '',
+  `sql` text NOT NULL,
+  `fields` text NOT NULL,
+  `langs` text NOT NULL,
+  `settings` text NOT NULL,
+  `filters` text NOT NULL,
+  `vars` text NOT NULL,
+  `builtin` tinyint(1) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `group` (`group`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_pivotspec`;
+CREATE TABLE IF NOT EXISTS `zt_pivotspec` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `pivot` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `desc` text NOT NULL,
+  `sql` text NOT NULL,
+  `fields` text NOT NULL,
+  `langs` text NOT NULL,
+  `vars` text NOT NULL,
+  `settings` text NOT NULL,
+  `filters` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `pivot` (`pivot`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_pivotdrill`;
+CREATE TABLE IF NOT EXISTS `zt_pivotdrill` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `pivot` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `version` varchar(10) NOT NULL DEFAULT '1',
+  `field` varchar(255) NOT NULL DEFAULT '',
+  `object` varchar(40) NOT NULL DEFAULT '',
+  `whereSql` mediumtext NOT NULL,
+  `condition` mediumtext NOT NULL,
+  `status` varchar(10) NOT NULL DEFAULT 'published',
+  `account` varchar(30) NOT NULL DEFAULT '',
+  `type` varchar(10) NOT NULL DEFAULT 'manual',
+  PRIMARY KEY (`id`),
+  KEY `pivot` (`pivot`,`version`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_repohook`;
+CREATE TABLE IF NOT EXISTS `zt_repohook` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `name` varchar(90) NOT NULL DEFAULT '',
+  `provider` varchar(20) NOT NULL DEFAULT 'github',
+  `token` varchar(64) NOT NULL DEFAULT '',
+  `secret` varchar(255) NOT NULL DEFAULT '',
+  `product` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `status` enum('normal','closed') NOT NULL DEFAULT 'normal',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NOT NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NOT NULL,
+  `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `token` (`token`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;
+-- DROP TABLE IF EXISTS `zt_repohooklog`;
+CREATE TABLE IF NOT EXISTS `zt_repohooklog` (
+  `id` mediumint(8) unsigned NOT NULL auto_increment,
+  `hookID` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `event` varchar(40) NOT NULL DEFAULT '',
+  `payload` text NOT NULL,
+  `result` text NOT NULL,
+  `createdDate` datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `hookID` (`hookID`)
+) ENGINE=MyISAM DEFAULT CHARSET=utf8;

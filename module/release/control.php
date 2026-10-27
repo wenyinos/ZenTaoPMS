@@ -172,6 +172,33 @@ class release extends control
         $this->view->branchName    = $release->productType == 'normal' ? '' : $this->loadModel('branch')->getById($release->branch);
         $this->display();
     }
+
+    /**
+     * Generate a markdown changelog for a release.
+     *
+     * @param  int    $releaseID
+     * @access public
+     * @return void
+     */
+    public function changelog($releaseID)
+    {
+        $release = $this->release->getById((int)$releaseID);
+        if(!$release) die(js::error($this->lang->notFound) . js::locate('back'));
+
+        $stories = $release->stories ? $this->dao->select('id,title')->from(TABLE_STORY)
+            ->where('id')->in($release->stories)->andWhere('deleted')->eq(0)->orderBy('id')->fetchAll('id') : array();
+        $bugs = $release->bugs ? $this->dao->select('id,title')->from(TABLE_BUG)
+            ->where('id')->in($release->bugs)->andWhere('deleted')->eq(0)->orderBy('id')->fetchAll('id') : array();
+        $leftBugs = $release->leftBugs ? $this->dao->select('id,title')->from(TABLE_BUG)
+            ->where('id')->in($release->leftBugs)->andWhere('deleted')->eq(0)->orderBy('id')->fetchAll('id') : array();
+
+        $this->commonAction($release->product);
+
+        $this->view->title    = $this->lang->release->changelog . $this->lang->colon . $release->name;
+        $this->view->release  = $release;
+        $this->view->markdown = $this->release->buildChangelog($release, $stories, $bugs, $leftBugs);
+        $this->display();
+    }
  
     /**
      * Delete a release.

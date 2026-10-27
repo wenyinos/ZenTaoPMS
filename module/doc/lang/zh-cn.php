@@ -165,3 +165,30 @@ $lang->doclib->product = $lang->productCommon . '库';
 
 $lang->doclib->main['product'] = $lang->productCommon . '主库';
 $lang->doclib->main['project'] = $lang->projectCommon . '主库';
+/* 文档增强：排序 / 移动 / 复制 / 最近浏览。 */
+$lang->doc->moveDoc         = '移动文档';
+$lang->doc->copyDoc         = '复制文档';
+$lang->doc->batchMoveDoc    = '批量移动';
+$lang->doc->copySuffix      = '（副本）';
+$lang->doc->copyTip         = '复制后正文为源文档最新版，浏览数与收藏不继承，附件暂不复制。';
+$lang->doc->batchMoveResult = '已移动 %s 个文档。';
+$lang->doc->batchMoveFailed = '没有可移动的文档。';
+$lang->doc->sortCatalog     = '目录排序';
+$lang->doc->sortDoc         = '文档排序';
+$lang->doc->sortTip         = '拖动后顺序自动保存。';
+$lang->doc->visitedbyme     = '最近浏览';
+/* 文档模板。 */
+$lang->doc->browseTemplate       = '文档模板';
+$lang->doc->createTemplate       = '新建模板';
+$lang->doc->editTemplate         = '编辑模板';
+$lang->doc->createFromTemplate   = '用此模板新建文档';
+$lang->doc->addTemplateType      = '新建分类';
+$lang->doc->allTypes             = '全部分类';
+$lang->doc->noTemplate           = '还没有模板。';
+$lang->doc->typeName             = '分类名称';
+$lang->doc->parentType           = '上级分类';
+$lang->doc->confirmDeleteTemplate = '确定删除该模板吗？';
+$lang->doc->confirmDeleteType    = '确定删除该分类吗？';
+if(!isset($lang->doc->error)) $lang->doc->error = new stdclass();
+$lang->doc->error->noTemplateLib     = '没找到文档模板库，请先执行升级。';
+$lang->doc->error->templateTypeNotEmpty = '该分类下还有模板，请先移走或删除。';

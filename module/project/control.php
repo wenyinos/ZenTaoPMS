@@ -240,6 +240,40 @@ class project extends control
     }
 
     /**
+     * Gantt chart of tasks in a project (read-only).
+     *
+     * @param  int    $projectID
+     * @access public
+     * @return void
+     */
+    public function gantt($projectID = 0)
+    {
+        $project   = $this->commonAction($projectID);
+        $projectID = $project->id;
+
+        /* 只取有完整起止日期、未取消的任务；无日期无法在时间轴上定位。`left` 是 MySQL 保留字，须加反引号。 */
+        $tasks = $this->dao->select('id, name, assignedTo, estStarted, deadline, status, estimate, consumed, `left`, parent')
+            ->from(TABLE_TASK)
+            ->where('project')->eq($projectID)
+            ->andWhere('deleted')->eq('0')
+            ->andWhere('status')->ne('cancel')
+            ->andWhere('estStarted')->ne('0000-00-00')
+            ->andWhere('deadline')->ne('0000-00-00')
+            ->orderBy('estStarted, id')
+            ->fetchAll('id');
+
+        $this->view->title      = $project->name . $this->lang->colon . $this->lang->project->gantt;
+        $this->view->position[] = html::a($this->createLink('project', 'browse', "projectID=$projectID"), $project->name);
+        $this->view->position[] = $this->lang->project->gantt;
+
+        $this->view->project = $project;
+        $this->view->tasks   = $tasks;
+        $this->view->users   = $this->loadModel('user')->getPairs('noletter');
+        $this->view->statusList = $this->lang->task->statusList;
+        $this->display();
+    }
+
+    /**
      * Browse tasks in group.
      *
      * @param  int    $projectID
@@ -1353,18 +1387,37 @@ class project extends control
 
         $this->project->setMenu($this->projects, $projectID);
         $project = $this->loadModel('project')->getById($projectID);
+
+        /* 泳道维度白名单（story 为历史默认值，finishedBy 保留兼容）。 */
+        $laneTypes = array('story', 'module', 'assignedTo', 'pri', 'finishedBy');
+        if(!in_array($type, $laneTypes)) $type = 'story';
+
         $tasks   = $this->project->getKanbanTasks($projectID, "id");
         $bugs    = $this->loadModel('bug')->getProjectBugs($projectID);
         $stories = $this->loadModel('story')->getProjectStories($projectID, $orderBy);
 
-        $kanbanGroup   = $this->project->getKanbanGroupData($stories, $tasks, $bugs, $type);
+        $kanbanGroup = $this->project->getKanbanGroupData($stories, $tasks, $bugs, $type);
+
+        /* 应用拖拽保存的人工顺序（未记录的卡片按 id 倒序追加在末尾）。 */
+        $cellOrder = $this->project->getKanbanOrder($projectID, $type);
+        if(!empty($cellOrder)) $this->project->sortKanbanCards($kanbanGroup, $cellOrder);
+
         $kanbanSetting = $this->project->getKanbanSetting($projectID);
+
+        /* 泳道名称：story 维度由视图用需求对象渲染，其余维度在此统一给出。 */
+        $laneNames = array('' => $this->lang->task->noAssigned);
+        if($type == 'module')     $laneNames = $this->loadModel('tree')->getOptionMenu($projectID, 'task');
+        if($type == 'pri')        $laneNames = $this->lang->task->priList;
+        if($type == 'assignedTo') $laneNames = array('' => $this->lang->task->noAssigned) + $this->loadModel('user')->getPairs('noletter');
+        if($type == 'finishedBy') $laneNames = array('' => $this->lang->task->noAssigned) + $this->loadModel('user')->getPairs('noletter');
 
         $this->view->title       = $this->lang->project->kanban;
         $this->view->position[]  = html::a($this->createLink('project', 'browse', "projectID=$projectID"), $project->name);
         $this->view->position[]  = $this->lang->project->kanban;
         $this->view->stories     = $stories;
         $this->view->realnames   = $this->loadModel('user')->getPairs('noletter');
+        $this->view->laneNames   = $laneNames;
+        $this->view->laneTypes   = $laneTypes;
         $this->view->storyOrder  = $orderBy;
         $this->view->orderBy     = 'id_asc';
         $this->view->projectID   = $projectID;
@@ -1376,6 +1429,33 @@ class project extends control
         $this->view->colorList   = $kanbanSetting->colorList;
 
         $this->display();
+    }
+
+    /**
+     * Save the card order of a kanban (ajax).
+     *
+     * 只保存同列拖拽产生的人工顺序；跨列拖拽仍走各对象的动作表单，
+     * 以免绕过状态机（工时/日期/父任务汇总都会丢）。
+     *
+     * @param  int    $projectID
+     * @access public
+     * @return void
+     */
+    public function kanbanOrder($projectID)
+    {
+        if(!$_POST) $this->send(array('result' => 'fail'));
+
+        $laneTypes = array('story', 'module', 'assignedTo', 'pri', 'finishedBy');
+        $type      = isset($_POST['type']) ? (string)$_POST['type'] : 'story';
+        if(!in_array($type, $laneTypes)) $type = 'story';
+
+        $order = isset($_POST['order']) ? json_decode((string)$_POST['order'], true) : array();
+        if(!is_array($order)) $order = array();
+
+        $order = $this->project->filterKanbanOrder($projectID, $order);
+        $this->project->saveKanbanOrder($projectID, $type, $order);
+
+        $this->send(array('result' => 'success'));
     }
 
     /**
@@ -2388,5 +2468,72 @@ class project extends control
             $this->project->linkStory($projectID, $planStories, $planProducts);
         }
         die(js::locate(helper::createLink('project', 'story', 'projectID=' . $projectID), 'parent'));
+    }
+
+    /**
+     * 需求跟踪矩阵：需求 × 迭代 × 任务/Bug/用例 的交叉跟踪视图。
+     *
+     * 与需求列表同源取数（同一 getProjectStories 与分页），便于两页互相切换；
+     * 迭代列取需求关联的（子）项目；任务/Bug/用例按需求批量取回（避免 N+1）。
+     *
+     * @param  int    $projectID
+     * @param  string $orderBy
+     * @param  string $type
+     * @param  int    $param
+     * @param  int    $recTotal
+     * @param  int    $recPerPage
+     * @param  int    $pageID
+     * @access public
+     * @return void
+     */
+    public function track($projectID = 0, $orderBy = '', $type = 'byModule', $param = 0, $recTotal = 0, $recPerPage = 50, $pageID = 1)
+    {
+        $this->loadModel('story');
+        $this->loadModel('user');
+        $this->app->loadLang('testcase');
+        $this->app->loadLang('bug');
+        $this->app->loadLang('task');
+
+        $this->project->getLimitedProject();
+
+        /* Save session. */
+        $this->app->session->set('storyList', $this->app->getURI(true));
+
+        /* 默认值留空，才能真正落到 cookie 记忆上（与 project::story 同构）。 */
+        if(!$orderBy) $orderBy = $this->cookie->projectTrackOrder ? $this->cookie->projectTrackOrder : 'pri_asc';
+        setcookie('projectTrackOrder', $orderBy, $this->config->cookieLife, $this->config->webRoot);
+
+        /* Append id for secend sort. */
+        $sort = $this->loadModel('common')->appendOrder($orderBy);
+
+        /* Set menu. */
+        $project   = $this->commonAction($projectID);
+        $projectID = $project->id;
+
+        /* Load pager. */
+        $this->app->loadClass('pager', $static = true);
+        $pager = new pager($recTotal, $recPerPage, $pageID);
+
+        $stories = $this->story->getProjectStories($projectID, $sort, $type, $param, $pager);
+        $this->loadModel('common')->saveQueryCondition($this->dao->get(), 'story', false);
+
+        $track = $this->project->getStoryTrackData($stories, $projectID);
+
+        $title      = $project->name . $this->lang->colon . $this->lang->project->track;
+        $position[] = html::a($this->createLink('project', 'browse', "projectID=$projectID"), $project->name);
+        $position[] = $this->lang->project->track;
+
+        $this->view->title    = $title;
+        $this->view->position = $position;
+        $this->view->project  = $project;
+        $this->view->stories  = $stories;
+        $this->view->track    = $track;
+        $this->view->users    = $this->user->getPairs('noletter');
+        $this->view->orderBy  = $orderBy;
+        $this->view->type     = $type;
+        $this->view->param    = $param;
+        $this->view->pager    = $pager;
+        $this->view->tabID    = 'story';
+        $this->display();
     }
 }

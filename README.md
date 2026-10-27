@@ -21,6 +21,28 @@ Themes registered in this build: **WenYin** (purple, default), **LightBlue**, **
 - Document and knowledge management
 - User, organization, and daily collaboration support
 
+## What's New (9.9.1 → 9.10.0)
+
+> This release is the **22.6 feature-port batch**. It **adds database tables and columns** — run the upgrade (see [Upgrade](#upgrade)). All upgrade steps are idempotent.
+
+### Features
+- **Kanban upgrade**: swimlanes by story / module / assignee / priority, drag-to-reorder within a column (order persisted per lane dimension in `zt_config`, no schema change), collapsible lanes.
+- **Test-suite export**: export cases by current browse condition or by selection, sharing the import template's field set so "export → edit → import" round-trips.
+- **Error log**: an `errorlog` admin page (per-request trace id grouping all errors of one request, level filter, 7-day auto cleanup). Hooked into the framework's `saveError()`; failures to log are swallowed so they never affect the response.
+- **Annual summary**: `report|annualData` — logins, actions, todos, effort and contribution radar plus monthly trends.
+- **Story track matrix**: a project story page listing each story's iterations and linked tasks/bugs/cases (folded at 3+), plus batch review (with reject reasons), batch assign and batch change-plan on the story list.
+- **CSV import/export** for tasks, bugs and stories: download template → import → preview with per-row error reasons → only valid rows are written, with a success/failure summary. UTF-8 exports now carry a BOM (no more mojibake in Excel) and attachment columns emit a plain "title + URL".
+- **Docs/knowledge base**: drag-to-sort for both categories and documents, move/copy a document, a "recently visited" list, and **document templates** (category tree, template CRUD, "create document from this template").
+- **Pivot tables (read-only)**: five built-ins (bug assign / bug create / project deviation / product summary / staff workload) rendered with rowspan and two-level headers; the legacy report pages remain available.
+
+### Fixes
+- Case import and case-library import **could not read UTF-8 files with a BOM**; both now go through the shared CSV layer (BOM stripping, encoding detection, exact + loose column matching), which also removes a latent column-misalignment bug when column order differs.
+- Fixed the doc list "All" view hiding documents that live in a category, and the "all documents" statistic undercounting them.
+- Fixed the burn-down chart 500 on projects with no working days (shipped separately as 9.9.1).
+
+### Platform
+- All upgrades are now **idempotent** (information_schema probe + `CREATE TABLE IF NOT EXISTS`, conditional seed rows), so jumping versions and re-running the upgrade are both safe.
+
 ## What's New (9.8.3_1 → 9.9.0)
 
 ### Interface (ported from ZenTao 10.1)
@@ -56,8 +78,8 @@ This build integrates with the **WenYin Open Source Community unified authentica
 This build ships an MCP (Model Context Protocol) service that lets AI agents maintain ZenTao project management directly from git commits — linking commits to tasks/stories/bugs, driving task status flow and logging effort.
 
 - Client: [`zentao-mcp-py/`](./zentao-mcp-py/) — a single-file Python client (standard library only; requires just `python3` and `git`). Works with any stdio MCP host (Qoder, Claude Desktop, Cursor, ...).
-- Server side: [`module/mcp/`](./module/mcp/) — self-contained signed endpoints (double MD5 + timestamp freshness ±300s, no user session). Two-tier keys: per-account personal keys are generated in-app at **My → MCP Key** ([`module/my/ext/`](./module/my/ext/), stored in `zt_config`), so write actions cannot impersonate another account; the team shared `MCP_SECRET` covers reads and not-yet-keyed accounts (transition mode). Each client keeps its own account and git-author mapping for attribution; per-repo sync state and commit-log assembly live server-side. Optional `MCP_STRICT` / `MCP_READONLY` / `MCP_IPS` hardening.
-- Setup and the full tool list (63 tools): see [`zentao-mcp-py/README.md`](./zentao-mcp-py/README.md), [`zentao-mcp-py/AGENT-GUIDE.md`](./zentao-mcp-py/AGENT-GUIDE.md) and [`AGENTS.md`](./AGENTS.md).
+- Server side: [`module/mcp/`](./module/mcp/) — self-contained signed endpoints (double MD5 + timestamp freshness ±300s, no user session). **Personal keys only (single channel)**: every account generates its own key in-app at **My → MCP Key** ([`module/my/ext/`](./module/my/ext/), stored in `zt_config`) and puts it in its client's `MCP_SECRET`. All requests — reads and writes — must be signed with a personal key, writes must use the key of the account they claim as `actor` (so no one can impersonate another account), and an account without a key simply cannot use MCP. There is **no shared/team key and no `MCP_STRICT` switch**. Each client keeps its own account and git-author mapping for attribution; per-repo sync state and commit-log assembly live server-side. Optional `MCP_READONLY` / `MCP_IPS` hardening.
+- Setup and the full tool list (68 tools): see [`zentao-mcp-py/README.md`](./zentao-mcp-py/README.md), [`zentao-mcp-py/AGENT-GUIDE.md`](./zentao-mcp-py/AGENT-GUIDE.md) and [`AGENTS.md`](./AGENTS.md).
 
 ## Installation (via official install.php wizard)
 
@@ -179,6 +201,13 @@ rewrite /(.*)$ /index.php/$1 last;
 - Review file permissions for `config/`, `tmp/`, and upload/runtime directories in deployment.
 - Keep the install/upgrade residue (`install.php`, `upgrade.php`, `checktable.php`) and the `api`/`editor` debug entry points blocked at runtime; lift only the residue rule for an install/upgrade and restore it immediately (see Installation step 5).
 - Run DB consistency checks after database-related changes.
+
+### Scheduled Tasks (cron)
+
+- **Status**: the dev deployment has scheduled tasks disabled (`system.common.global.cron = 0`); browsers no longer request `/cron-ajaxExec-*`, so the 499s and long-lived PHP-FPM workers are gone.
+- **What stops**: daily backup, async mail, async webhook delivery, errorlog cleanup, burn-down refresh and task reminders.
+- **To re-enable**: do not just flip the admin switch; follow [cron deployment](doc/cron-deployment.md) (keep the switch on, block browser triggers in nginx, run a single CLI daemon).
+- With the switch off, `bin/ztcli ... cron-ajaxExec` exits immediately by design.
 
 ## License
 Z PUBLIC LICENSE 1.2 (see `LICENSE`).

@@ -115,6 +115,8 @@ $lang->project->latestDynamic     = '最新动态';
 $lang->project->build             = '所有版本';
 $lang->project->testtask          = '测试任务';
 $lang->project->burn              = '燃尽图';
+$lang->project->gantt             = '甘特图';
+$lang->project->ganttEmpty        = '暂无可展示的任务（任务的预计开始与截止日期需完整）';
 $lang->project->computeBurn       = '更新';
 $lang->project->burnData          = '燃尽图数据';
 $lang->project->fixFirst          = '修改首天工时';
@@ -173,6 +175,7 @@ $lang->project->groups['pri']        = '优先级分组';
 $lang->project->groups['assignedTo'] = '指派给分组';
 $lang->project->groups['finishedBy'] = '完成者分组';
 $lang->project->groups['closedBy']   = '关闭者分组';
+$lang->project->groups['module']       = '模块分组';
 $lang->project->groups['type']       = '类型分组';
 
 $lang->project->groupFilter['story']['all']         = $lang->project->all;
@@ -272,6 +275,10 @@ $lang->project->orderList['pri_desc']   = "需求优先级倒序";
 $lang->project->orderList['stage_asc']  = "需求阶段正序";
 $lang->project->orderList['stage_desc'] = "需求阶段倒序";
 
+$lang->project->kanbanNoLane = '未分组';
+$lang->project->kanbanOrderFailed = '看板顺序保存失败，请刷新后重试。';
+$lang->project->track           = '需求矩阵';
+$lang->project->trackIteration  = '所属迭代';
 $lang->project->kanban        = "看板";
 $lang->project->kanbanSetting = "看板设置";
 $lang->project->resetKanban   = "恢复默认";

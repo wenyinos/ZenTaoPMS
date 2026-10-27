@@ -3,8 +3,7 @@ $(function()
     $('#type').change(function()
     {
         var type = $(this).val();
-        $('#sendTypeTR').toggle(type != 'dingding');
-        $('#paramsTR').toggle(type != 'bearychat' && type != 'dingding');
+        $('#paramsTR').toggle(type != 'weixin' && type != 'feishu');
         $('#urlNote').html(urlNote[type]);
     });
 

@@ -21,7 +21,8 @@
       <table class='table table-form'>
         <tr>
           <th><?php echo $lang->webhook->type;?></th>
-          <td><?php echo html::select('type', $lang->webhook->typeList, $webhook->type, "class='form-control'");?></td>
+          <?php $type = isset($lang->webhook->typeList[$webhook->type]) ? $webhook->type : 'default';?>
+          <td><?php echo html::select('type', $lang->webhook->typeList, $type, "class='form-control'");?></td>
           <td></td>
         </tr>
         <tr>
@@ -39,13 +40,11 @@
           <td><?php echo html::input('domain', $webhook->domain, "class='form-control'");?></td>
           <td></td>
         </tr>
-        <?php if($webhook->type != 'dingding'):?>
         <tr>
           <th><?php echo $lang->webhook->sendType;?></th>
           <td><?php echo html::select('sendType', $lang->webhook->sendTypeList, $webhook->sendType, "class='form-control'");?></td>
           <td><?php echo $lang->webhook->note->async;?></td>
         </tr>
-        <?php endif;?>
         <tr>
           <th><?php echo $lang->webhook->product;?></th>
           <td><?php echo html::select('products[]', $products, $webhook->products, "class='form-control chosen' multiple");?></td>
@@ -56,7 +55,7 @@
           <td><?php echo html::select('projects[]', $projects, $webhook->projects, "class='form-control chosen' multiple");?></td>
           <td><?php echo $lang->webhook->note->project;?></td>
         </tr>
-        <?php if(strpos(',bearychat,dingding,', ",$webhook->type,") === false):?>
+        <?php if(strpos(',weixin,feishu,', ",$webhook->type,") === false):?>
         <tr id='paramsTR'>
           <th>
             <div class='checkbox-primary'>
