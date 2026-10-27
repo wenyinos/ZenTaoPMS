@@ -1,8 +1,8 @@
-# WenYinOS ZenTaoPMS 9.10.5
+# WenYinOS ZenTaoPMS 9.10.6
 
 English | [简体中文](README.zh-CN.md)
 
-> **Unofficial build** — this is a community fork maintained by the [WenYin Open Source Community](https://github.com/wenyinos/ZenTaoPMS). Version `9.10.5` does not correspond to any official ZenTao release: it means ZenTao **9.8.3** core with the **10.1** interface ported on top, plus the **22.6** feature ports (see below).
+> **Unofficial build** — this is a community fork maintained by the [WenYin Open Source Community](https://github.com/wenyinos/ZenTaoPMS). Version `9.10.6` does not correspond to any official ZenTao release: it means ZenTao **9.8.3** core with the **10.1** interface ported on top, plus the **22.6** feature ports (see below).
 >
 > **Maintenance status (2026-10-27)**: 9.10.x has been merged into `main` and is now the maintained line; `9.9.x` is end-of-life and no longer receives fixes. Historical versions remain available as tags/releases.
 
@@ -22,6 +22,16 @@ Themes registered in this build: **WenYin** (purple, default), **LightBlue**, **
 - QA management: bugs, test cases, test tasks
 - Document and knowledge management
 - User, organization, and daily collaboration support
+
+## What's New (9.10.5 → 9.10.6)
+
+> This release is a **mobile template-layer rewrite**. No database schema changes; the desktop layout at ≥1280px is unchanged.
+
+- **Phone/tablet responsive layer**: breakpoint extended to ≤1279px, releasing the 10.1 skin's 1280px minimum width; header, search and user bar stack, while module and page actions each get their own row.
+- **Dashboard**: two columns become one; welcome tiles render two per row; the flowchart becomes role cards with numbered steps on phones and keeps the table on tablets.
+- **Lists and detail pages**: main/side columns stack; wide tables scroll inside their container; the fixed list bulk-action bar moves after the table; the detail action bar moves to the end of the page.
+- **Forms and modals**: table-form labels and controls stack; the "affected builds" multi-select and its create/refresh/all buttons split into separate rows; login/modal pages share the mobile layer; the security notice becomes normal flow.
+- **Compatibility**: desktop ≥1280px unchanged; the upgrade only writes the version number (no new tables/columns).
 
 ## What's New (9.9.1 → 9.10.0)
 

@@ -56,6 +56,10 @@ $onlybody     = zget($_GET, 'onlybody', 'no');
       css::import($defaultTheme . 'compat.css?t=' . $compatCssTs);
   }
 
+  /* 移动端模板层：登录页/弹窗（header.lite）与全站共用；header.html.php 的 hook 由常量保护，不会重复输出。 */
+  $mobileHookFile = $this->app->getModuleRoot() . '/common/ext/view/header.mobile.hook.php';
+  if(file_exists($mobileHookFile)) include $mobileHookFile;
+
   if(!defined('IN_INSTALL') and commonModel::isTutorialMode())
   {
       $wizardModule    = defined('WIZARD_MODULE') ? WIZARD_MODULE : $this->moduleName;
